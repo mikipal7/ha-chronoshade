@@ -72,24 +72,20 @@ TIME_MAP_SCHEMA = vol.All(
     ]
 )
 
-TRAVEL_TIME_SCHEMA = vol.Any(
-    {
-        vol.Optional(
-            CONF_TRAVELLING_TIME_DOWN, default=DEFAULT_TRAVEL_TIME
-        ): cv.positive_int,
-        vol.Optional(CONF_TRAVELLING_TIME_UP, default=DEFAULT_TRAVEL_TIME): cv.positive_int,
-        vol.Optional(CONF_TILTING_TIME_DOWN, default=None): vol.Any(
-            cv.positive_float, None
-        ),
-        vol.Optional(CONF_TILTING_TIME_UP, default=None): vol.Any(cv.positive_float, None),
-        vol.Optional(CONF_OPENING_DELAY, default=0): cv.positive_float,
-        vol.Optional(CONF_CLOSING_DELAY, default=0): cv.positive_float,
-    },
-    {
-        vol.Optional(CONF_POSITION_TIME_MAP, default=None): TIME_MAP_SCHEMA,
-        vol.Optional(CONF_TILT_POSITION_TIME_MAP, default=None): TIME_MAP_SCHEMA,
-    }
-)
+TRAVEL_TIME_SCHEMA = {
+    vol.Optional(
+        CONF_TRAVELLING_TIME_DOWN, default=DEFAULT_TRAVEL_TIME
+    ): cv.positive_int,
+    vol.Optional(CONF_TRAVELLING_TIME_UP, default=DEFAULT_TRAVEL_TIME): cv.positive_int,
+    vol.Optional(CONF_TILTING_TIME_DOWN, default=None): vol.Any(
+        cv.positive_float, None
+    ),
+    vol.Optional(CONF_TILTING_TIME_UP, default=None): vol.Any(cv.positive_float, None),
+    vol.Optional(CONF_OPENING_DELAY, default=0): cv.positive_float,
+    vol.Optional(CONF_CLOSING_DELAY, default=0): cv.positive_float,
+    vol.Optional(CONF_POSITION_TIME_MAP, default=None): TIME_MAP_SCHEMA,
+    vol.Optional(CONF_TILT_POSITION_TIME_MAP, default=None): TIME_MAP_SCHEMA,
+}
 
 SWITCH_COVER_SCHEMA = {
     **BASE_DEVICE_SCHEMA,
@@ -143,13 +139,18 @@ class TimePositionCalculator:
         self._last_position = None
         
         if position_time_map:
-            # Sort the map by time
-            self.position_time_map = sorted(position_time_map, key=lambda x: x['time'])
-            # Validate the map
-            if self.position_time_map[0]['time'] != 0:
+            # Validate the map has at least 2 points
+            if len(position_time_map) < 2:
+                raise ValueError("Position time map must have at least 2 points")
+            # Validate first point starts at time 0
+            if position_time_map[0]['time'] != 0:
                 raise ValueError("First time entry must be 0")
-            if self.position_time_map[-1]['position'] not in (0, 100):
-                raise ValueError("Last position must be 0 or 100")
+            # Validate times are in order
+            prev_time = -1
+            for point in position_time_map:
+                if point['time'] <= prev_time:
+                    raise ValueError("Times must be in ascending order")
+                prev_time = point['time']
     
     def start_travel(self, target_position, current_position=None):
         """Start traveling to target position."""
