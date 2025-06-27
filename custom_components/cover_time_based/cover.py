@@ -381,6 +381,12 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         _LOGGER.debug("async_close_cover")
         current_position = self.travel_calc.current_position()
         if current_position is None or current_position < 100:
+            if self.travel_calc.is_open():
+                self.travel_calc.set_travel_time_down(
+                    self._travel_time_down - self._closing_delay
+                )
+            else:
+                self.travel_calc.set_travel_time_down(self._travel_time_down)
             self.travel_calc.start_travel_down()
             self.start_auto_updater()
             self._update_tilt_before_travel(SERVICE_CLOSE_COVER)
@@ -391,6 +397,12 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         _LOGGER.debug("async_open_cover")
         current_position = self.travel_calc.current_position()
         if current_position is None or current_position > 0:
+            if self.travel_calc.is_closed():
+                self.travel_calc.set_travel_time_up(
+                    self._travel_time_up - self._opening_delay
+                )
+            else:
+                self.travel_calc.set_travel_time_up(self._travel_time_up)
             self.travel_calc.start_travel_up()
             self.start_auto_updater()
             self._update_tilt_before_travel(SERVICE_OPEN_COVER)
@@ -539,8 +551,6 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         if command == SERVICE_CLOSE_COVER:
             cmd = "DOWN"
             self._state = False
-            if self._closing_delay > 0:
-                await sleep(self._closing_delay)
             if self._cover_entity_id is not None:
                 await self.hass.services.async_call(
                     "cover",
@@ -583,8 +593,6 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         elif command == SERVICE_OPEN_COVER:
             cmd = "UP"
             self._state = True
-            if self._opening_delay > 0:
-                await sleep(self._opening_delay)
             if self._cover_entity_id is not None:
                 await self.hass.services.async_call(
                     "cover",
