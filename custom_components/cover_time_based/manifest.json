@@ -1,11 +1,11 @@
 {
   "domain": "cover_time_based",
   "name": "Cover Time Based",
-  "codeowners": ["@Sese-Schneider"],
-  "documentation": "https://github.com/Sese-Schneider/ha-cover-time-based",
+  "codeowners": ["@mikipal7"],
+  "documentation": "https://github.com/mikipal7/ha-cover-time-based",
   "integration_type": "helper",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/Sese-Schneider/ha-cover-time-based/issues",
+  "issue_tracker": "https://github.com/mikipal7/ha-cover-time-based/issues",
   "requirements": [
     "xknx==3.6.0"
   ],
