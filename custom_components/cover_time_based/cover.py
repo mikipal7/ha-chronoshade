@@ -51,6 +51,8 @@ CONF_COVER_ENTITY_ID = "cover_entity_id"
 
 SERVICE_SET_KNOWN_POSITION = "set_known_position"
 SERVICE_SET_KNOWN_TILT_POSITION = "set_known_tilt_position"
+SERVICE_OPEN_SLACKS = "open_slacks"
+SERVICE_CLOSE_SLACKS = "close_slacks"
 
 BASE_DEVICE_SCHEMA = {
     vol.Required(CONF_NAME): cv.string,
@@ -172,6 +174,12 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     )
     platform.async_register_entity_service(
         SERVICE_SET_KNOWN_TILT_POSITION, TILT_POSITION_SCHEMA, "set_known_tilt_position"
+    )
+    platform.async_register_entity_service(
+        SERVICE_OPEN_SLACKS, {}, "async_open_slacks"
+    )
+    platform.async_register_entity_service(
+        SERVICE_CLOSE_SLACKS, {}, "async_close_slacks"
     )
 
 
@@ -382,11 +390,11 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         current_position = self.travel_calc.current_position()
         if current_position is None or current_position < 100:
             if self.travel_calc.is_open():
-                self.travel_calc.set_travel_time_down(
+                self.travel_calc.travel_time_down = (
                     self._travel_time_down - self._closing_delay
                 )
             else:
-                self.travel_calc.set_travel_time_down(self._travel_time_down)
+                self.travel_calc.travel_time_down = self._travel_time_down
             self.travel_calc.start_travel_down()
             self.start_auto_updater()
             self._update_tilt_before_travel(SERVICE_CLOSE_COVER)
@@ -398,11 +406,11 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         current_position = self.travel_calc.current_position()
         if current_position is None or current_position > 0:
             if self.travel_calc.is_closed():
-                self.travel_calc.set_travel_time_up(
+                self.travel_calc.travel_time_up = (
                     self._travel_time_up - self._opening_delay
                 )
             else:
-                self.travel_calc.set_travel_time_up(self._travel_time_up)
+                self.travel_calc.travel_time_up = self._travel_time_up
             self.travel_calc.start_travel_up()
             self.start_auto_updater()
             self._update_tilt_before_travel(SERVICE_OPEN_COVER)
@@ -431,6 +439,20 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         _LOGGER.debug("async_stop_cover")
         self._handle_stop()
         await self._async_handle_command(SERVICE_STOP_COVER)
+
+    async def async_open_slacks(self, **kwargs):
+        """Open the slacks of the cover."""
+        if self.travel_calc.is_closed() and self._opening_delay > 0:
+            await self._async_handle_command(SERVICE_OPEN_COVER)
+            await sleep(self._opening_delay)
+            await self._async_handle_command(SERVICE_STOP_COVER)
+
+    async def async_close_slacks(self, **kwargs):
+        """Close the slacks of the cover."""
+        if self.travel_calc.is_open() and self._closing_delay > 0:
+            await self._async_handle_command(SERVICE_CLOSE_COVER)
+            await sleep(self._closing_delay)
+            await self._async_handle_command(SERVICE_STOP_COVER)
 
     async def set_position(self, position):
         """Move cover to a designated position."""
