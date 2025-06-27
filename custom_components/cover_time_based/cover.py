@@ -39,6 +39,9 @@ CONF_TILTING_TIME_DOWN = "tilting_time_down"
 CONF_TILTING_TIME_UP = "tilting_time_up"
 DEFAULT_TRAVEL_TIME = 30
 
+CONF_OPENING_DELAY = "opening_delay"
+CONF_CLOSING_DELAY = "closing_delay"
+
 CONF_OPEN_SWITCH_ENTITY_ID = "open_switch_entity_id"
 CONF_CLOSE_SWITCH_ENTITY_ID = "close_switch_entity_id"
 CONF_STOP_SWITCH_ENTITY_ID = "stop_switch_entity_id"
@@ -62,6 +65,8 @@ TRAVEL_TIME_SCHEMA = {
         cv.positive_float, None
     ),
     vol.Optional(CONF_TILTING_TIME_UP, default=None): vol.Any(cv.positive_float, None),
+    vol.Optional(CONF_OPENING_DELAY, default=0): cv.positive_float,
+    vol.Optional(CONF_CLOSING_DELAY, default=0): cv.positive_float,
 }
 
 SWITCH_COVER_SCHEMA = {
@@ -113,6 +118,8 @@ def devices_from_config(domain_config):
         travel_time_up = config.pop(CONF_TRAVELLING_TIME_UP)
         tilt_time_down = config.pop(CONF_TILTING_TIME_DOWN)
         tilt_time_up = config.pop(CONF_TILTING_TIME_UP)
+        opening_delay = config.pop(CONF_OPENING_DELAY)
+        closing_delay = config.pop(CONF_CLOSING_DELAY)
 
         open_switch_entity_id = (
             config.pop(CONF_OPEN_SWITCH_ENTITY_ID)
@@ -142,6 +149,8 @@ def devices_from_config(domain_config):
             travel_time_up,
             tilt_time_down,
             tilt_time_up,
+            opening_delay,
+            closing_delay,
             open_switch_entity_id,
             close_switch_entity_id,
             stop_switch_entity_id,
@@ -175,6 +184,8 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         travel_time_up,
         tilt_time_down,
         tilt_time_up,
+        opening_delay,
+        closing_delay,
         open_switch_entity_id,
         close_switch_entity_id,
         stop_switch_entity_id,
@@ -188,6 +199,8 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         self._travel_time_up = travel_time_up
         self._tilting_time_down = tilt_time_down
         self._tilting_time_up = tilt_time_up
+        self._opening_delay = opening_delay
+        self._closing_delay = closing_delay
 
         self._open_switch_entity_id = open_switch_entity_id
         self._close_switch_entity_id = close_switch_entity_id
@@ -273,6 +286,10 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
             attr[CONF_TILTING_TIME_DOWN] = self._tilting_time_down
         if self._tilting_time_up is not None:
             attr[CONF_TILTING_TIME_UP] = self._tilting_time_up
+        if self._opening_delay is not None:
+            attr[CONF_OPENING_DELAY] = self._opening_delay
+        if self._closing_delay is not None:
+            attr[CONF_CLOSING_DELAY] = self._closing_delay
         return attr
 
     @property
@@ -522,6 +539,8 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         if command == SERVICE_CLOSE_COVER:
             cmd = "DOWN"
             self._state = False
+            if self._closing_delay > 0:
+                await sleep(self._closing_delay)
             if self._cover_entity_id is not None:
                 await self.hass.services.async_call(
                     "cover",
@@ -564,6 +583,8 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         elif command == SERVICE_OPEN_COVER:
             cmd = "UP"
             self._state = True
+            if self._opening_delay > 0:
+                await sleep(self._opening_delay)
             if self._cover_entity_id is not None:
                 await self.hass.services.async_call(
                     "cover",
