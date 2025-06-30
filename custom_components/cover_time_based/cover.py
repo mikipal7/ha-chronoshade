@@ -118,7 +118,8 @@ class PositionCalculator:
         self._movement_start_time = None
         self._movement_direction = None  # "opening" or "closing"
         self._target_position = None
-        self._target_time = None
+        self._start_position = None  # Position when movement started
+        self._movement_duration = None  # How long the movement should take
     
     def _validate_and_sort_time_map(self, time_map: Dict[float, int], map_type: str) -> Dict[float, int]:
         """Validate and sort time map."""
@@ -215,6 +216,18 @@ class PositionCalculator:
         # Target position not reachable
         return times[-1]
     
+    def _calculate_movement_duration(self, start_pos: int, target_pos: int, direction: str) -> float:
+        """Calculate how long the movement should take based on the time map."""
+        if direction == "opening":
+            time_map = self._opening_time_map
+        else:
+            time_map = self._closing_time_map
+        
+        start_time = self._find_time_for_position(start_pos, time_map)
+        target_time = self._find_time_for_position(target_pos, time_map)
+        
+        return abs(target_time - start_time)
+    
     def start_opening(self, target_position: int = 100):
         """Start opening movement to target position."""
         if target_position <= self._current_position:
@@ -223,10 +236,13 @@ class PositionCalculator:
         self._is_moving = True
         self._movement_direction = "opening"
         self._movement_start_time = time.time()
+        self._start_position = self._current_position
         self._target_position = target_position
-        self._target_time = self._find_time_for_position(target_position, self._opening_time_map)
+        self._movement_duration = self._calculate_movement_duration(
+            self._current_position, target_position, "opening"
+        )
         
-        _LOGGER.debug(f"Starting opening from {self._current_position} to {target_position}, target time: {self._target_time}s")
+        _LOGGER.debug(f"Starting opening from {self._current_position} to {target_position}, duration: {self._movement_duration}s")
     
     def start_closing(self, target_position: int = 0):
         """Start closing movement to target position."""
@@ -236,10 +252,13 @@ class PositionCalculator:
         self._is_moving = True
         self._movement_direction = "closing"
         self._movement_start_time = time.time()
+        self._start_position = self._current_position
         self._target_position = target_position
-        self._target_time = self._find_time_for_position(target_position, self._closing_time_map)
+        self._movement_duration = self._calculate_movement_duration(
+            self._current_position, target_position, "closing"
+        )
         
-        _LOGGER.debug(f"Starting closing from {self._current_position} to {target_position}, target time: {self._target_time}s")
+        _LOGGER.debug(f"Starting closing from {self._current_position} to {target_position}, duration: {self._movement_duration}s")
     
     def get_current_position(self) -> int:
         """Get current position, updating if moving."""
@@ -248,12 +267,17 @@ class PositionCalculator:
         
         elapsed_time = time.time() - self._movement_start_time
         
-        if self._movement_direction == "opening":
-            new_position = self._interpolate_position(elapsed_time, self._opening_time_map)
-        else:  # closing
-            new_position = self._interpolate_position(elapsed_time, self._closing_time_map)
+        # Calculate progress as a ratio (0.0 to 1.0)
+        if self._movement_duration > 0:
+            progress = min(elapsed_time / self._movement_duration, 1.0)
+        else:
+            progress = 1.0
         
-        self._current_position = new_position
+        # Linear interpolation between start and target position
+        position_diff = self._target_position - self._start_position
+        new_position = self._start_position + (position_diff * progress)
+        
+        self._current_position = round(new_position)
         return self._current_position
     
     def is_moving(self) -> bool:
@@ -269,7 +293,7 @@ class PositionCalculator:
         
         # Check if we've reached the target position or time
         elapsed_time = time.time() - self._movement_start_time
-        time_reached = elapsed_time >= self._target_time
+        time_reached = elapsed_time >= self._movement_duration
         
         if self._movement_direction == "opening":
             position_reached = current_pos >= self._target_position
@@ -286,7 +310,8 @@ class PositionCalculator:
             self._movement_start_time = None
             self._movement_direction = None
             self._target_position = None
-            self._target_time = None
+            self._start_position = None
+            self._movement_duration = None
             _LOGGER.debug(f"Stopped at position {self._current_position}")
     
     def set_position(self, position: int):
@@ -302,7 +327,6 @@ class PositionCalculator:
     def is_open(self) -> bool:
         """Check if cover is open."""
         return self.get_current_position() == 100
-
 
 class TiltCalculator:
     """Simple linear tilt calculator (unchanged from original logic)."""
