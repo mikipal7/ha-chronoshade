@@ -6,8 +6,6 @@
   "integration_type": "helper",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/mikipal7/ha-cover-time-based/issues",
-  "requirements": [
-    "xknx==3.6.0"
-  ],
-  "version": "2.3.1"
+  "requirements": [],
+  "version": "3.0.0"
 }
