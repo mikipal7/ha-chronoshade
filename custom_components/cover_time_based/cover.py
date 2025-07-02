@@ -43,6 +43,7 @@ from .const import (
     CONF_OPEN_SWITCH_ENTITY_ID,
     CONF_CLOSE_SWITCH_ENTITY_ID,
     CONF_STOP_SWITCH_ENTITY_ID,
+    CONF_COVER_ENTITY_ID,
     CONF_IS_BUTTON,
     SERVICE_SET_KNOWN_POSITION,
     SERVICE_SET_KNOWN_TILT_POSITION,
@@ -462,11 +463,11 @@ async def async_setup_entry(
         closing_time_map=config[CONF_CLOSING_TIME_MAP],
         tilt_time_down=config.get(CONF_TILTING_TIME_DOWN),
         tilt_time_up=config.get(CONF_TILTING_TIME_UP),
-        open_switch_entity_id=config[CONF_OPEN_SWITCH_ENTITY_ID],
-        close_switch_entity_id=config[CONF_CLOSE_SWITCH_ENTITY_ID],
+        open_switch_entity_id=config.get(CONF_OPEN_SWITCH_ENTITY_ID),
+        close_switch_entity_id=config.get(CONF_CLOSE_SWITCH_ENTITY_ID),
         stop_switch_entity_id=config.get(CONF_STOP_SWITCH_ENTITY_ID),
         is_button=config.get(CONF_IS_BUTTON, False),
-        cover_entity_id=None,  # Not supported in config flow yet
+        cover_entity_id=config.get(CONF_COVER_ENTITY_ID),
     )
     
     async_add_entities([cover])

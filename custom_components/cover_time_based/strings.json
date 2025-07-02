@@ -3,32 +3,41 @@
     "step": {
       "user": {
         "title": "Add Cover Time Based",
-        "description": "Configure a time-based cover with position maps.\n\nTime maps define position at specific time intervals in JSON format:\n- Opening example: {opening_example}\n- Closing example: {closing_example}",
+        "description": "Configure a time-based cover with position maps.\n\n**Entity Options:**\n- **Use Existing Cover**: Control an existing cover entity\n- **Use Individual Switches**: Control via separate open/close/stop entities\n\n**Time Map Options:**\n- **Simple Mode**: Enter total time and positions (easier)\n- **Advanced Mode**: Use JSON format for precise control\n\nJSON examples:\n- Opening: {opening_example}\n- Closing: {closing_example}\n\n**Note**: Tilt times are optional - leave empty if not needed.",
         "data": {
           "name": "Name",
+          "use_existing_cover": "Use Existing Cover (instead of individual switches)",
+          "cover_entity_id": "Cover Entity (when using existing cover)",
           "open_switch_entity_id": "Open Entity (Switch/Script/Automation)",
           "close_switch_entity_id": "Close Entity (Switch/Script/Automation)",
           "stop_switch_entity_id": "Stop Entity (Optional)",
           "is_button": "Entities are buttons/momentary (auto turn off)",
-          "opening_time_map": "Opening Time Map (JSON)",
-          "closing_time_map": "Closing Time Map (JSON)",
-          "tilting_time_down": "Tilt Down Time (seconds)",
-          "tilting_time_up": "Tilt Up Time (seconds)"
+          "use_simple_mode": "Use Simple Mode (easier setup)",
+          "opening_total_time": "Opening Total Time (seconds) - Simple Mode",
+          "opening_positions": "Opening Positions (comma-separated, e.g., 0,50,100) - Simple Mode",
+          "closing_total_time": "Closing Total Time (seconds) - Simple Mode", 
+          "closing_positions": "Closing Positions (comma-separated, e.g., 100,50,0) - Simple Mode",
+          "opening_time_map": "Opening Time Map (JSON) - Advanced Mode",
+          "closing_time_map": "Closing Time Map (JSON) - Advanced Mode",
+          "tilting_time_down": "Tilt Down Time (seconds, optional)",
+          "tilting_time_up": "Tilt Up Time (seconds, optional)"
         }
       },
       "reconfigure": {
         "title": "Reconfigure Cover Time Based",
-        "description": "Update the configuration for this cover.\n\nTime maps define position at specific time intervals in JSON format:\n- Opening example: {opening_example}\n- Closing example: {closing_example}",
+        "description": "Update the configuration for this cover.\n\n**Entity Options:**\n- **Use Existing Cover**: Control an existing cover entity\n- **Use Individual Switches**: Control via separate open/close/stop entities\n\nTime maps define position at specific time intervals in JSON format:\n- Opening example: {opening_example}\n- Closing example: {closing_example}",
         "data": {
           "name": "Name",
+          "use_existing_cover": "Use Existing Cover (instead of individual switches)",
+          "cover_entity_id": "Cover Entity (when using existing cover)",
           "open_switch_entity_id": "Open Entity (Switch/Script/Automation)",
           "close_switch_entity_id": "Close Entity (Switch/Script/Automation)",
           "stop_switch_entity_id": "Stop Entity (Optional)",
           "is_button": "Entities are buttons/momentary (auto turn off)",
           "opening_time_map": "Opening Time Map (JSON)",
           "closing_time_map": "Closing Time Map (JSON)",
-          "tilting_time_down": "Tilt Down Time (seconds)",
-          "tilting_time_up": "Tilt Up Time (seconds)"
+          "tilting_time_down": "Tilt Down Time (seconds, leave empty to disable)",
+          "tilting_time_up": "Tilt Up Time (seconds, leave empty to disable)"
         }
       }
     },

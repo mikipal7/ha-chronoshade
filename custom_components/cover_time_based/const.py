@@ -11,6 +11,8 @@ CONF_OPEN_SWITCH_ENTITY_ID = "open_switch_entity_id"
 CONF_CLOSE_SWITCH_ENTITY_ID = "close_switch_entity_id"
 CONF_STOP_SWITCH_ENTITY_ID = "stop_switch_entity_id"
 CONF_IS_BUTTON = "is_button"
+CONF_COVER_ENTITY_ID = "cover_entity_id"
+CONF_USE_EXISTING_COVER = "use_existing_cover"
 
 # Default values
 DEFAULT_TILT_TIME = 5.0
