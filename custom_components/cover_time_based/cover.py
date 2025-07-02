@@ -16,6 +16,7 @@ from homeassistant.components.cover import (
     PLATFORM_SCHEMA,
     CoverEntity,
     CoverEntityFeature,
+    CoverDeviceClass,
 )
 from homeassistant.const import (
     CONF_NAME,
@@ -586,12 +587,32 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
     @property
     def device_class(self):
         """Return the device class of the cover."""
-        return None
+        # Use CURTAIN for better Alexa recognition as it's more generic
+        return CoverDeviceClass.CURTAIN
     
     @property
     def extra_state_attributes(self):
         """Return the device state attributes."""
-        return {}
+        attrs = {
+            "friendly_name": self._name,
+            "integration": "cover_time_based",
+        }
+        
+        # Add movement information
+        if self.position_calc.is_moving():
+            attrs["movement_direction"] = self.position_calc._movement_direction
+            attrs["target_position"] = self.position_calc._target_position
+        
+        # Add tilt information if supported
+        if self._has_tilt_support():
+            attrs["supports_tilt"] = True
+            if self.tilt_calc.is_moving():
+                attrs["tilt_movement_direction"] = self.tilt_calc._movement_direction
+                attrs["target_tilt_position"] = self.tilt_calc._target_position
+        else:
+            attrs["supports_tilt"] = False
+            
+        return attrs
     
     @property
     def current_cover_position(self) -> int | None:
