@@ -78,6 +78,49 @@ def parse_flexible_json(json_str: str) -> dict:
                 raise vol.Invalid(f"Invalid JSON format. Please check syntax: {err}") from err
 
 
+def validate_entities(user_input: dict[str, Any], hass: HomeAssistant) -> tuple[str | None, str | None, str | None, str | None]:
+    """Validate entities based on configuration mode."""
+    use_existing_cover = user_input.get(CONF_USE_EXISTING_COVER, False)
+    
+    if use_existing_cover:
+        # Validate cover entity exists
+        cover_entity = user_input.get(CONF_COVER_ENTITY_ID, "").strip()
+        if not cover_entity:
+            raise vol.Invalid("Cover entity is required when using existing cover")
+        
+        if hass.states.get(cover_entity) is None:
+            raise vol.Invalid(f"Cover entity '{cover_entity}' not found")
+        
+        # Set switch entities to None when using existing cover
+        return cover_entity, None, None, None
+    else:
+        # Validate switch entities exist
+        open_entity = user_input.get(CONF_OPEN_SWITCH_ENTITY_ID, "").strip()
+        close_entity = user_input.get(CONF_CLOSE_SWITCH_ENTITY_ID, "").strip()
+        stop_entity = user_input.get(CONF_STOP_SWITCH_ENTITY_ID, "").strip()
+        
+        if not open_entity:
+            raise vol.Invalid("Open switch entity is required when not using existing cover")
+        if not close_entity:
+            raise vol.Invalid("Close switch entity is required when not using existing cover")
+        
+        if hass.states.get(open_entity) is None:
+            raise vol.Invalid(f"Open switch entity '{open_entity}' not found")
+        
+        if hass.states.get(close_entity) is None:
+            raise vol.Invalid(f"Close switch entity '{close_entity}' not found")
+        
+        # Only validate stop entity if it's provided
+        if stop_entity and hass.states.get(stop_entity) is None:
+            raise vol.Invalid(f"Stop switch entity '{stop_entity}' not found")
+        
+        # Set to None if empty string
+        if not stop_entity:
+            stop_entity = None
+            
+        return None, open_entity, close_entity, stop_entity
+
+
 def validate_time_map(time_map_str: str, map_type: str) -> dict[float, int]:
     """Validate and parse time map from string."""
     # Clean up the input string
@@ -96,7 +139,14 @@ def validate_time_map(time_map_str: str, map_type: str) -> dict[float, int]:
     
     # Convert keys to float and values to int
     try:
-        time_map = {float(k): int(v) for k, v in time_map_raw.items()}
+        time_map = {}
+        for k, v in time_map_raw.items():
+            # Handle string keys that might be numbers
+            if isinstance(k, str):
+                k = k.strip()
+            time_key = float(k)
+            time_value = int(v)
+            time_map[time_key] = time_value
     except (ValueError, TypeError) as err:
         raise vol.Invalid(f"Invalid time map format: {err}. Raw data: {time_map_raw}") from err
     
@@ -113,8 +163,9 @@ def validate_time_map(time_map_str: str, map_type: str) -> dict[float, int]:
     _LOGGER.debug(f"{map_type} time map - sorted times: {times}")
     _LOGGER.debug(f"{map_type} time map - first time: {times[0]} (type: {type(times[0])})")
     
-    # Validate time progression
-    if abs(times[0]) > 1e-10:  # Use small epsilon for floating point comparison
+    # Validate time progression - check if first time is approximately 0
+    # Use a more lenient epsilon to handle floating point precision issues
+    if abs(times[0]) > 0.001:  # Allow up to 0.001 difference from 0
         raise vol.Invalid(f"{map_type} time map must start at time 0 (found {times[0]}, sorted times: {times[:3]}...)")
     
     # Validate position range
@@ -163,42 +214,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                # Determine if using existing cover or individual switches
-                use_existing_cover = user_input.get(CONF_USE_EXISTING_COVER, False)
-                
-                if use_existing_cover:
-                    # Validate cover entity exists
-                    cover_entity = user_input.get(CONF_COVER_ENTITY_ID)
-                    if not cover_entity or cover_entity.strip() == "":
-                        raise vol.Invalid("Cover entity is required when using existing cover")
-                    
-                    if self.hass.states.get(cover_entity) is None:
-                        raise vol.Invalid(f"Cover entity '{cover_entity}' not found")
-                    
-                    # Set switch entities to None when using existing cover
-                    open_entity = None
-                    close_entity = None
-                    stop_entity = None
-                else:
-                    # Validate switch entities exist
-                    open_entity = user_input.get(CONF_OPEN_SWITCH_ENTITY_ID)
-                    close_entity = user_input.get(CONF_CLOSE_SWITCH_ENTITY_ID)
-                    stop_entity = user_input.get(CONF_STOP_SWITCH_ENTITY_ID)
-                    cover_entity = None
-                    
-                    if not open_entity or open_entity.strip() == "":
-                        raise vol.Invalid("Open switch entity is required when not using existing cover")
-                    if not close_entity or close_entity.strip() == "":
-                        raise vol.Invalid("Close switch entity is required when not using existing cover")
-                    
-                    if self.hass.states.get(open_entity) is None:
-                        raise vol.Invalid(f"Open switch entity '{open_entity}' not found")
-                    
-                    if self.hass.states.get(close_entity) is None:
-                        raise vol.Invalid(f"Close switch entity '{close_entity}' not found")
-                    
-                    if stop_entity and stop_entity.strip() != "" and self.hass.states.get(stop_entity) is None:
-                        raise vol.Invalid(f"Stop switch entity '{stop_entity}' not found")
+                # Validate entities based on configuration mode
+                cover_entity, open_entity, close_entity, stop_entity = validate_entities(user_input, self.hass)
                 
                 # Validate time maps
                 opening_time_map = validate_time_map(user_input[CONF_OPENING_TIME_MAP], "Opening")
@@ -250,25 +267,53 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Get the user schema with preserved values."""
         if user_input is None:
             user_input = {}
-            
-        return vol.Schema({
+        
+        # Determine if using existing cover to conditionally require fields
+        use_existing_cover = user_input.get(CONF_USE_EXISTING_COVER, False)
+        
+        schema_dict = {
             vol.Required(CONF_NAME, default=user_input.get(CONF_NAME, "")): str,
-            vol.Optional(CONF_USE_EXISTING_COVER, default=user_input.get(CONF_USE_EXISTING_COVER, False)): bool,
-            # Cover entity option
-            vol.Optional(CONF_COVER_ENTITY_ID, default=user_input.get(CONF_COVER_ENTITY_ID, "")): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["cover"])
-            ),
-            # Switch entity options
-            vol.Optional(CONF_OPEN_SWITCH_ENTITY_ID, default=user_input.get(CONF_OPEN_SWITCH_ENTITY_ID, "")): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(CONF_CLOSE_SWITCH_ENTITY_ID, default=user_input.get(CONF_CLOSE_SWITCH_ENTITY_ID, "")): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(CONF_STOP_SWITCH_ENTITY_ID, default=user_input.get(CONF_STOP_SWITCH_ENTITY_ID, "")): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(CONF_IS_BUTTON, default=user_input.get(CONF_IS_BUTTON, False)): bool,
+            vol.Optional(CONF_USE_EXISTING_COVER, default=use_existing_cover): bool,
+        }
+        
+        if use_existing_cover:
+            # When using existing cover, only cover entity is required
+            schema_dict.update({
+                vol.Required(CONF_COVER_ENTITY_ID, default=user_input.get(CONF_COVER_ENTITY_ID, "")): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["cover"])
+                ),
+                # Switch entities are optional and hidden when using existing cover
+                vol.Optional(CONF_OPEN_SWITCH_ENTITY_ID, default=""): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+                ),
+                vol.Optional(CONF_CLOSE_SWITCH_ENTITY_ID, default=""): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+                ),
+                vol.Optional(CONF_STOP_SWITCH_ENTITY_ID, default=""): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+                ),
+                vol.Optional(CONF_IS_BUTTON, default=False): bool,
+            })
+        else:
+            # When using individual switches, switch entities are required
+            schema_dict.update({
+                vol.Optional(CONF_COVER_ENTITY_ID, default=""): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["cover"])
+                ),
+                vol.Required(CONF_OPEN_SWITCH_ENTITY_ID, default=user_input.get(CONF_OPEN_SWITCH_ENTITY_ID, "")): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+                ),
+                vol.Required(CONF_CLOSE_SWITCH_ENTITY_ID, default=user_input.get(CONF_CLOSE_SWITCH_ENTITY_ID, "")): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+                ),
+                vol.Optional(CONF_STOP_SWITCH_ENTITY_ID, default=user_input.get(CONF_STOP_SWITCH_ENTITY_ID, "")): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+                ),
+                vol.Optional(CONF_IS_BUTTON, default=user_input.get(CONF_IS_BUTTON, False)): bool,
+            })
+        
+        # Add common fields
+        schema_dict.update({
             # JSON fields
             vol.Required(
                 CONF_OPENING_TIME_MAP, 
@@ -282,6 +327,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Optional(CONF_TILTING_TIME_DOWN, default=user_input.get(CONF_TILTING_TIME_DOWN, "")): str,
             vol.Optional(CONF_TILTING_TIME_UP, default=user_input.get(CONF_TILTING_TIME_UP, "")): str,
         })
+        
+        return vol.Schema(schema_dict)
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
@@ -291,42 +338,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         
         if user_input is not None:
             try:
-                # Determine if using existing cover or individual switches
-                use_existing_cover = user_input.get(CONF_USE_EXISTING_COVER, False)
-                
-                if use_existing_cover:
-                    # Validate cover entity exists
-                    cover_entity = user_input.get(CONF_COVER_ENTITY_ID)
-                    if not cover_entity or cover_entity.strip() == "":
-                        raise vol.Invalid("Cover entity is required when using existing cover")
-                    
-                    if self.hass.states.get(cover_entity) is None:
-                        raise vol.Invalid(f"Cover entity '{cover_entity}' not found")
-                    
-                    # Set switch entities to None when using existing cover
-                    open_entity = None
-                    close_entity = None
-                    stop_entity = None
-                else:
-                    # Validate switch entities exist
-                    open_entity = user_input.get(CONF_OPEN_SWITCH_ENTITY_ID)
-                    close_entity = user_input.get(CONF_CLOSE_SWITCH_ENTITY_ID)
-                    stop_entity = user_input.get(CONF_STOP_SWITCH_ENTITY_ID)
-                    cover_entity = None
-                    
-                    if not open_entity or open_entity.strip() == "":
-                        raise vol.Invalid("Open switch entity is required when not using existing cover")
-                    if not close_entity or close_entity.strip() == "":
-                        raise vol.Invalid("Close switch entity is required when not using existing cover")
-                    
-                    if self.hass.states.get(open_entity) is None:
-                        raise vol.Invalid(f"Open switch entity '{open_entity}' not found")
-                    
-                    if self.hass.states.get(close_entity) is None:
-                        raise vol.Invalid(f"Close switch entity '{close_entity}' not found")
-                    
-                    if stop_entity and stop_entity.strip() != "" and self.hass.states.get(stop_entity) is None:
-                        raise vol.Invalid(f"Stop switch entity '{stop_entity}' not found")
+                # Validate entities based on configuration mode
+                cover_entity, open_entity, close_entity, stop_entity = validate_entities(user_input, self.hass)
                 
                 # Validate time maps
                 opening_time_map = validate_time_map(user_input[CONF_OPENING_TIME_MAP], "Opening")
@@ -393,39 +406,73 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if use_existing_cover is None:
             use_existing_cover = data.get(CONF_COVER_ENTITY_ID) is not None
         
-        return vol.Schema({
+        schema_dict = {
             vol.Required(CONF_NAME, default=user_input.get(CONF_NAME) or data.get(CONF_NAME, "")): str,
             vol.Optional(CONF_USE_EXISTING_COVER, default=use_existing_cover): bool,
-            # Cover entity option
-            vol.Optional(
-                CONF_COVER_ENTITY_ID,
-                default=user_input.get(CONF_COVER_ENTITY_ID) or data.get(CONF_COVER_ENTITY_ID, "")
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["cover"])
-            ),
-            # Switch entity options
-            vol.Optional(
-                CONF_OPEN_SWITCH_ENTITY_ID, 
-                default=user_input.get(CONF_OPEN_SWITCH_ENTITY_ID) or data.get(CONF_OPEN_SWITCH_ENTITY_ID, "")
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(
-                CONF_CLOSE_SWITCH_ENTITY_ID, 
-                default=user_input.get(CONF_CLOSE_SWITCH_ENTITY_ID) or data.get(CONF_CLOSE_SWITCH_ENTITY_ID, "")
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(
-                CONF_STOP_SWITCH_ENTITY_ID, 
-                default=user_input.get(CONF_STOP_SWITCH_ENTITY_ID) or data.get(CONF_STOP_SWITCH_ENTITY_ID, "")
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(
-                CONF_IS_BUTTON, 
-                default=user_input.get(CONF_IS_BUTTON, data.get(CONF_IS_BUTTON, False))
-            ): bool,
+        }
+        
+        if use_existing_cover:
+            # When using existing cover, only cover entity is required
+            schema_dict.update({
+                vol.Required(
+                    CONF_COVER_ENTITY_ID,
+                    default=user_input.get(CONF_COVER_ENTITY_ID) or data.get(CONF_COVER_ENTITY_ID, "")
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["cover"])
+                ),
+                # Switch entities are optional when using existing cover
+                vol.Optional(
+                    CONF_OPEN_SWITCH_ENTITY_ID, 
+                    default=""
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+                ),
+                vol.Optional(
+                    CONF_CLOSE_SWITCH_ENTITY_ID, 
+                    default=""
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+                ),
+                vol.Optional(
+                    CONF_STOP_SWITCH_ENTITY_ID, 
+                    default=""
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+                ),
+                vol.Optional(CONF_IS_BUTTON, default=False): bool,
+            })
+        else:
+            # When using individual switches, switch entities are required
+            schema_dict.update({
+                vol.Optional(CONF_COVER_ENTITY_ID, default=""): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["cover"])
+                ),
+                vol.Required(
+                    CONF_OPEN_SWITCH_ENTITY_ID, 
+                    default=user_input.get(CONF_OPEN_SWITCH_ENTITY_ID) or data.get(CONF_OPEN_SWITCH_ENTITY_ID, "")
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+                ),
+                vol.Required(
+                    CONF_CLOSE_SWITCH_ENTITY_ID, 
+                    default=user_input.get(CONF_CLOSE_SWITCH_ENTITY_ID) or data.get(CONF_CLOSE_SWITCH_ENTITY_ID, "")
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+                ),
+                vol.Optional(
+                    CONF_STOP_SWITCH_ENTITY_ID, 
+                    default=user_input.get(CONF_STOP_SWITCH_ENTITY_ID) or data.get(CONF_STOP_SWITCH_ENTITY_ID, "")
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+                ),
+                vol.Optional(
+                    CONF_IS_BUTTON, 
+                    default=user_input.get(CONF_IS_BUTTON, data.get(CONF_IS_BUTTON, False))
+                ): bool,
+            })
+        
+        # Add common fields
+        schema_dict.update({
             vol.Required(
                 CONF_OPENING_TIME_MAP, 
                 default=user_input.get(CONF_OPENING_TIME_MAP) if user_input.get(CONF_OPENING_TIME_MAP) is not None else json.dumps(data.get(CONF_OPENING_TIME_MAP, {"0": 0, "10": 100}))
@@ -443,3 +490,5 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 default=str(current_tilt_up) if current_tilt_up is not None else ""
             ): str,  # Use string to allow empty values
         })
+        
+        return vol.Schema(schema_dict)
