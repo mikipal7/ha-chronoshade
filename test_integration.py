@@ -27,6 +27,10 @@ def test_manifest():
             print("❌ config_flow should be true in manifest.json")
             return False
         
+        if manifest["integration_type"] != "device":
+            print("❌ integration_type should be 'device' in manifest.json")
+            return False
+        
         print("✅ manifest.json is valid")
         return True
     

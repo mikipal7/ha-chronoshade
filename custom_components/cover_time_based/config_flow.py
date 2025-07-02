@@ -154,13 +154,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         data_schema = vol.Schema({
             vol.Required(CONF_NAME): str,
             vol.Required(CONF_OPEN_SWITCH_ENTITY_ID): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="switch")
+                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
             ),
             vol.Required(CONF_CLOSE_SWITCH_ENTITY_ID): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="switch")
+                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
             ),
             vol.Optional(CONF_STOP_SWITCH_ENTITY_ID): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="switch")
+                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
             ),
             vol.Optional(CONF_IS_BUTTON, default=False): bool,
             vol.Required(
@@ -233,19 +233,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_OPEN_SWITCH_ENTITY_ID, 
                 default=data.get(CONF_OPEN_SWITCH_ENTITY_ID, "")
             ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="switch")
+                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
             ),
             vol.Required(
                 CONF_CLOSE_SWITCH_ENTITY_ID, 
                 default=data.get(CONF_CLOSE_SWITCH_ENTITY_ID, "")
             ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="switch")
+                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
             ),
             vol.Optional(
                 CONF_STOP_SWITCH_ENTITY_ID, 
                 default=data.get(CONF_STOP_SWITCH_ENTITY_ID, "")
             ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="switch")
+                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
             ),
             vol.Optional(
                 CONF_IS_BUTTON, 

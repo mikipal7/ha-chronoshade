@@ -32,6 +32,7 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceInfo
 
 from .const import (
     DOMAIN,
@@ -571,6 +572,17 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         return f"{DOMAIN}_{self._unique_id}"
     
     @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._unique_id)},
+            name=self._name,
+            manufacturer="Cover Time Based",
+            model="Time-based Cover Controller",
+            sw_version="4.0.0",
+        )
+    
+    @property
     def device_class(self):
         """Return the device class of the cover."""
         return None
@@ -832,36 +844,20 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
                     False,
                 )
             else:
-                await self.hass.services.async_call(
-                    "homeassistant",
-                    "turn_off",
-                    {"entity_id": self._open_switch_entity_id},
-                    False,
-                )
-                await self.hass.services.async_call(
-                    "homeassistant",
-                    "turn_on",
-                    {"entity_id": self._close_switch_entity_id},
-                    False,
-                )
+                # Turn off open entity first
+                await self._async_call_entity_service(self._open_switch_entity_id, "turn_off")
+                
+                # Turn on close entity
+                await self._async_call_entity_service(self._close_switch_entity_id, "turn_on")
+                
+                # Turn off stop entity if exists
                 if self._stop_switch_entity_id is not None:
-                    await self.hass.services.async_call(
-                        "homeassistant",
-                        "turn_off",
-                        {"entity_id": self._stop_switch_entity_id},
-                        False,
-                    )
+                    await self._async_call_entity_service(self._stop_switch_entity_id, "turn_off")
 
                 if self._is_button:
                     # The close_switch_entity_id should be turned off one second after being turned on
                     await sleep(1)
-
-                    await self.hass.services.async_call(
-                        "homeassistant",
-                        "turn_off",
-                        {"entity_id": self._close_switch_entity_id},
-                        False,
-                    )
+                    await self._async_call_entity_service(self._close_switch_entity_id, "turn_off")
 
         elif command == SERVICE_OPEN_COVER:
             cmd = "UP"
@@ -874,35 +870,20 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
                     False,
                 )
             else:
-                await self.hass.services.async_call(
-                    "homeassistant",
-                    "turn_off",
-                    {"entity_id": self._close_switch_entity_id},
-                    False,
-                )
-                await self.hass.services.async_call(
-                    "homeassistant",
-                    "turn_on",
-                    {"entity_id": self._open_switch_entity_id},
-                    False,
-                )
+                # Turn off close entity first
+                await self._async_call_entity_service(self._close_switch_entity_id, "turn_off")
+                
+                # Turn on open entity
+                await self._async_call_entity_service(self._open_switch_entity_id, "turn_on")
+                
+                # Turn off stop entity if exists
                 if self._stop_switch_entity_id is not None:
-                    await self.hass.services.async_call(
-                        "homeassistant",
-                        "turn_off",
-                        {"entity_id": self._stop_switch_entity_id},
-                        False,
-                    )
+                    await self._async_call_entity_service(self._stop_switch_entity_id, "turn_off")
+                
                 if self._is_button:
                     # The open_switch_entity_id should be turned off one second after being turned on
                     await sleep(1)
-
-                    await self.hass.services.async_call(
-                        "homeassistant",
-                        "turn_off",
-                        {"entity_id": self._open_switch_entity_id},
-                        False,
-                    )
+                    await self._async_call_entity_service(self._open_switch_entity_id, "turn_off")
 
         elif command == SERVICE_STOP_COVER:
             cmd = "STOP"
@@ -915,38 +896,39 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
                     False,
                 )
             else:
-                await self.hass.services.async_call(
-                    "homeassistant",
-                    "turn_off",
-                    {"entity_id": self._close_switch_entity_id},
-                    False,
-                )
-                await self.hass.services.async_call(
-                    "homeassistant",
-                    "turn_off",
-                    {"entity_id": self._open_switch_entity_id},
-                    False,
-                )
+                # Turn off close and open entities
+                await self._async_call_entity_service(self._close_switch_entity_id, "turn_off")
+                await self._async_call_entity_service(self._open_switch_entity_id, "turn_off")
+                
+                # Turn on stop entity if exists
                 if self._stop_switch_entity_id is not None:
-                    await self.hass.services.async_call(
-                        "homeassistant",
-                        "turn_on",
-                        {"entity_id": self._stop_switch_entity_id},
-                        False,
-                    )
+                    await self._async_call_entity_service(self._stop_switch_entity_id, "turn_on")
 
                     if self._is_button:
                         # The stop_switch_entity_id should be turned off one second after being turned on
                         await sleep(1)
-
-                        await self.hass.services.async_call(
-                            "homeassistant",
-                            "turn_off",
-                            {"entity_id": self._stop_switch_entity_id},
-                            False,
-                        )
+                        await self._async_call_entity_service(self._stop_switch_entity_id, "turn_off")
 
         _LOGGER.debug("_async_handle_command :: %s", cmd)
 
         # Update state of entity
         self.async_write_ha_state()
+    
+    async def _async_call_entity_service(self, entity_id: str, action: str):
+        """Call appropriate service based on entity type."""
+        if not entity_id:
+            return
+        
+        domain = entity_id.split('.')[0]
+        
+        if domain == "script":
+            if action == "turn_on":
+                await self.hass.services.async_call("script", "turn_on", {"entity_id": entity_id}, False)
+            # Scripts don't have turn_off, so we ignore turn_off calls
+        elif domain == "automation":
+            if action == "turn_on":
+                await self.hass.services.async_call("automation", "trigger", {"entity_id": entity_id}, False)
+            # Automations don't have turn_off in this context, so we ignore turn_off calls
+        else:
+            # For switches, input_boolean, and other entities that support turn_on/turn_off
+            await self.hass.services.async_call("homeassistant", action, {"entity_id": entity_id}, False)
