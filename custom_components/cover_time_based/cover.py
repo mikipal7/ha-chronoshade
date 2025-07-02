@@ -24,33 +24,37 @@ from homeassistant.const import (
     SERVICE_OPEN_COVER,
     SERVICE_STOP_COVER,
 )
-from homeassistant.core import callback
+from homeassistant.core import callback, HomeAssistant
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+from .const import (
+    DOMAIN,
+    CONF_OPENING_TIME_MAP,
+    CONF_CLOSING_TIME_MAP,
+    CONF_TILTING_TIME_DOWN,
+    CONF_TILTING_TIME_UP,
+    CONF_OPEN_SWITCH_ENTITY_ID,
+    CONF_CLOSE_SWITCH_ENTITY_ID,
+    CONF_STOP_SWITCH_ENTITY_ID,
+    CONF_IS_BUTTON,
+    SERVICE_SET_KNOWN_POSITION,
+    SERVICE_SET_KNOWN_TILT_POSITION,
+    SERVICE_OPEN_SLACKS,
+    SERVICE_CLOSE_SLACKS,
+    DEFAULT_TILT_TIME,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
+# Legacy platform schema for backward compatibility
 CONF_DEVICES = "devices"
-CONF_OPENING_TIME_MAP = "opening_time_map"
-CONF_CLOSING_TIME_MAP = "closing_time_map"
-CONF_TILTING_TIME_DOWN = "tilting_time_down"
-CONF_TILTING_TIME_UP = "tilting_time_up"
-DEFAULT_TILT_TIME = 5
-
-CONF_OPEN_SWITCH_ENTITY_ID = "open_switch_entity_id"
-CONF_CLOSE_SWITCH_ENTITY_ID = "close_switch_entity_id"
-CONF_STOP_SWITCH_ENTITY_ID = "stop_switch_entity_id"
-CONF_IS_BUTTON = "is_button"
-
 CONF_COVER_ENTITY_ID = "cover_entity_id"
-
-SERVICE_SET_KNOWN_POSITION = "set_known_position"
-SERVICE_SET_KNOWN_TILT_POSITION = "set_known_tilt_position"
-SERVICE_OPEN_SLACKS = "open_slacks"
-SERVICE_CLOSE_SLACKS = "close_slacks"
 
 BASE_DEVICE_SCHEMA = {
     vol.Required(CONF_NAME): cv.string,
@@ -441,8 +445,50 @@ def devices_from_config(domain_config):
     return devices
 
 
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up Cover Time Based from a config entry."""
+    config = config_entry.data
+    
+    # Create cover entity from config entry
+    cover = CoverTimeBased(
+        device_id=config_entry.entry_id,
+        name=config[CONF_NAME],
+        opening_time_map=config[CONF_OPENING_TIME_MAP],
+        closing_time_map=config[CONF_CLOSING_TIME_MAP],
+        tilt_time_down=config.get(CONF_TILTING_TIME_DOWN),
+        tilt_time_up=config.get(CONF_TILTING_TIME_UP),
+        open_switch_entity_id=config[CONF_OPEN_SWITCH_ENTITY_ID],
+        close_switch_entity_id=config[CONF_CLOSE_SWITCH_ENTITY_ID],
+        stop_switch_entity_id=config.get(CONF_STOP_SWITCH_ENTITY_ID),
+        is_button=config.get(CONF_IS_BUTTON, False),
+        cover_entity_id=None,  # Not supported in config flow yet
+    )
+    
+    async_add_entities([cover])
+    
+    # Register services
+    platform = entity_platform.current_platform.get()
+    if platform:
+        platform.async_register_entity_service(
+            SERVICE_SET_KNOWN_POSITION, POSITION_SCHEMA, "set_known_position"
+        )
+        platform.async_register_entity_service(
+            SERVICE_SET_KNOWN_TILT_POSITION, TILT_POSITION_SCHEMA, "set_known_tilt_position"
+        )
+        platform.async_register_entity_service(
+            SERVICE_OPEN_SLACKS, {}, "async_open_slacks"
+        )
+        platform.async_register_entity_service(
+            SERVICE_CLOSE_SLACKS, {}, "async_close_slacks"
+        )
+
+
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Set up the cover platform."""
+    """Set up the cover platform (legacy YAML support)."""
     async_add_entities(devices_from_config(config))
     
     platform = entity_platform.current_platform.get()
@@ -522,7 +568,7 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
     @property
     def unique_id(self):
         """Return the unique id."""
-        return "cover_timebased_uuid_" + self._unique_id
+        return f"{DOMAIN}_{self._unique_id}"
     
     @property
     def device_class(self):

@@ -1,0 +1,38 @@
+# Example configuration for testing the migration helper
+cover:
+  - platform: cover_time_based
+    devices:
+      bedroom_cover:
+        name: "Bedroom Cover"
+        open_switch_entity_id: switch.bedroom_cover_open
+        close_switch_entity_id: switch.bedroom_cover_close
+        stop_switch_entity_id: switch.bedroom_cover_stop
+        is_button: false
+        opening_time_map:
+          0: 0
+          5: 30
+          10: 100
+        closing_time_map:
+          0: 100
+          8: 50
+          12: 0
+        tilting_time_down: 2.0
+        tilting_time_up: 2.0
+      
+      living_room_blinds:
+        name: "Living Room Blinds"
+        open_switch_entity_id: switch.living_room_open
+        close_switch_entity_id: switch.living_room_close
+        is_button: true
+        opening_time_map:
+          0: 0
+          3: 20
+          6: 50
+          8: 80
+          10: 100
+        closing_time_map:
+          0: 100
+          2: 80
+          5: 50
+          8: 20
+          10: 0

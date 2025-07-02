@@ -1,4 +1,58 @@
 {
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add Cover Time Based",
+        "description": "Configure a time-based cover with position maps.\n\nTime maps define position at specific time intervals in JSON format:\n- Opening example: {opening_example}\n- Closing example: {closing_example}",
+        "data": {
+          "name": "Name",
+          "open_switch_entity_id": "Open Switch Entity",
+          "close_switch_entity_id": "Close Switch Entity",
+          "stop_switch_entity_id": "Stop Switch Entity (Optional)",
+          "is_button": "Switches are buttons (auto turn off)",
+          "opening_time_map": "Opening Time Map (JSON)",
+          "closing_time_map": "Closing Time Map (JSON)",
+          "tilting_time_down": "Tilt Down Time (seconds)",
+          "tilting_time_up": "Tilt Up Time (seconds)"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Cover Time Based",
+        "description": "Update the configuration for this cover.\n\nTime maps define position at specific time intervals in JSON format:\n- Opening example: {opening_example}\n- Closing example: {closing_example}",
+        "data": {
+          "name": "Name",
+          "open_switch_entity_id": "Open Switch Entity",
+          "close_switch_entity_id": "Close Switch Entity",
+          "stop_switch_entity_id": "Stop Switch Entity (Optional)",
+          "is_button": "Switches are buttons (auto turn off)",
+          "opening_time_map": "Opening Time Map (JSON)",
+          "closing_time_map": "Closing Time Map (JSON)",
+          "tilting_time_down": "Tilt Down Time (seconds)",
+          "tilting_time_up": "Tilt Up Time (seconds)"
+        }
+      }
+    },
+    "error": {
+      "unknown": "Unexpected error occurred",
+      "invalid_time_map": "Invalid time map format"
+    },
+    "abort": {
+      "already_configured": "Cover with this name is already configured",
+      "reconfigure_successful": "Configuration updated successfully"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Cover Time Based Options",
+        "description": "Configure advanced options for the cover.",
+        "data": {
+          "tilting_time_down": "Tilt Down Time (seconds)",
+          "tilting_time_up": "Tilt Up Time (seconds)"
+        }
+      }
+    }
+  },
   "services": {
     "set_known_position": {
       "name": "Set cover position",

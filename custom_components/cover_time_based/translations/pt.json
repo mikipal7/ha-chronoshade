@@ -1,4 +1,58 @@
 {
+  "config": {
+    "step": {
+      "user": {
+        "title": "Adicionar Estore Baseado em Tempo",
+        "description": "Configure um estore baseado em tempo com mapas de posição.\n\nMapas de tempo definem posição em intervalos específicos no formato JSON:\n- Exemplo abertura: {opening_example}\n- Exemplo fecho: {closing_example}",
+        "data": {
+          "name": "Nome",
+          "open_switch_entity_id": "Entidade do Interruptor de Abertura",
+          "close_switch_entity_id": "Entidade do Interruptor de Fecho",
+          "stop_switch_entity_id": "Entidade do Interruptor de Paragem (Opcional)",
+          "is_button": "Interruptores são botões (desligam automaticamente)",
+          "opening_time_map": "Mapa de Tempo de Abertura (JSON)",
+          "closing_time_map": "Mapa de Tempo de Fecho (JSON)",
+          "tilting_time_down": "Tempo de Inclinação para Baixo (segundos)",
+          "tilting_time_up": "Tempo de Inclinação para Cima (segundos)"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigurar Estore Baseado em Tempo",
+        "description": "Atualizar a configuração deste estore.\n\nMapas de tempo definem posição em intervalos específicos no formato JSON:\n- Exemplo abertura: {opening_example}\n- Exemplo fecho: {closing_example}",
+        "data": {
+          "name": "Nome",
+          "open_switch_entity_id": "Entidade do Interruptor de Abertura",
+          "close_switch_entity_id": "Entidade do Interruptor de Fecho",
+          "stop_switch_entity_id": "Entidade do Interruptor de Paragem (Opcional)",
+          "is_button": "Interruptores são botões (desligam automaticamente)",
+          "opening_time_map": "Mapa de Tempo de Abertura (JSON)",
+          "closing_time_map": "Mapa de Tempo de Fecho (JSON)",
+          "tilting_time_down": "Tempo de Inclinação para Baixo (segundos)",
+          "tilting_time_up": "Tempo de Inclinação para Cima (segundos)"
+        }
+      }
+    },
+    "error": {
+      "unknown": "Erro inesperado ocorreu",
+      "invalid_time_map": "Formato de mapa de tempo inválido"
+    },
+    "abort": {
+      "already_configured": "Estore com este nome já está configurado",
+      "reconfigure_successful": "Configuração atualizada com sucesso"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opções do Estore Baseado em Tempo",
+        "description": "Configure opções avançadas para o estore.",
+        "data": {
+          "tilting_time_down": "Tempo de Inclinação para Baixo (segundos)",
+          "tilting_time_up": "Tempo de Inclinação para Cima (segundos)"
+        }
+      }
+    }
+  },
   "services": {
     "set_known_position": {
       "name": "Definir a posição do estore",
