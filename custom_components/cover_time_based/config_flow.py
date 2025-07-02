@@ -45,42 +45,45 @@ def validate_tilt_time(value: Any) -> float | None:
         raise vol.Invalid(f"Invalid tilt time value: {err}") from err
 
 
-def create_time_map_from_simple_config(total_time: float, positions: list[int]) -> dict[float, int]:
-    """Create a time map from simple configuration."""
-    if not positions or len(positions) < 2:
-        raise vol.Invalid("At least 2 positions are required")
+def parse_flexible_json(json_str: str) -> dict:
+    """Parse JSON with flexible key format (with or without quotes)."""
+    if not json_str.strip():
+        raise vol.Invalid("JSON string cannot be empty")
     
-    time_map = {}
-    time_step = total_time / (len(positions) - 1)
-    
-    for i, position in enumerate(positions):
-        if not 0 <= position <= 100:
-            raise vol.Invalid(f"Position {position} must be between 0 and 100")
-        time_map[i * time_step] = position
-    
-    return time_map
-
-
-def parse_time_map_input(time_map_str: str, simple_mode: bool, total_time: float, positions_str: str, map_type: str) -> dict[float, int]:
-    """Parse time map from either JSON or simple mode."""
-    if simple_mode:
-        # Parse positions from comma-separated string
+    try:
+        # First try standard JSON parsing
+        return json.loads(json_str)
+    except json.JSONDecodeError:
         try:
-            positions = [int(p.strip()) for p in positions_str.split(",") if p.strip()]
-            return create_time_map_from_simple_config(total_time, positions)
-        except ValueError as err:
-            raise vol.Invalid(f"Invalid positions format: {err}") from err
-    else:
-        # Use existing JSON validation
-        return validate_time_map(time_map_str, map_type)
+            # Try to fix common JSON issues
+            # Add quotes around unquoted keys
+            import re
+            
+            # Replace unquoted keys with quoted keys
+            # This regex finds keys that are not quoted (word characters followed by colon)
+            fixed_json = re.sub(r'(\b\w+\b)(\s*:\s*)', r'"\1"\2', json_str)
+            
+            # Try parsing the fixed JSON
+            return json.loads(fixed_json)
+        except (json.JSONDecodeError, re.error):
+            try:
+                # Last attempt: try eval for Python dict syntax
+                # This is safe because we control the input and only allow dict-like structures
+                result = eval(json_str, {"__builtins__": {}}, {})
+                if isinstance(result, dict):
+                    return result
+                else:
+                    raise vol.Invalid("Input must be a dictionary/object")
+            except Exception as err:
+                raise vol.Invalid(f"Invalid JSON format. Please check syntax: {err}") from err
 
 
 def validate_time_map(time_map_str: str, map_type: str) -> dict[float, int]:
     """Validate and parse time map from string."""
     try:
-        time_map_raw = json.loads(time_map_str)
-    except json.JSONDecodeError as err:
-        raise vol.Invalid(f"Invalid JSON format: {err}") from err
+        time_map_raw = parse_flexible_json(time_map_str)
+    except vol.Invalid as err:
+        raise vol.Invalid(f"Invalid format in {map_type.lower()} time map: {err}") from err
     
     if not isinstance(time_map_raw, dict):
         raise vol.Invalid("Time map must be a JSON object")
@@ -187,27 +190,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if stop_entity and self.hass.states.get(stop_entity) is None:
                         raise vol.Invalid(f"Stop switch entity '{stop_entity}' not found")
                 
-                # Determine configuration mode and validate time maps
-                simple_mode = user_input.get("use_simple_mode", False)
-                
-                if simple_mode:
-                    # Validate simple mode inputs
-                    opening_time_map = parse_time_map_input(
-                        "", True,
-                        user_input.get("opening_total_time", 10.0),
-                        user_input.get("opening_positions", "0,100"),
-                        "Opening"
-                    )
-                    closing_time_map = parse_time_map_input(
-                        "", True,
-                        user_input.get("closing_total_time", 10.0),
-                        user_input.get("closing_positions", "100,0"),
-                        "Closing"
-                    )
-                else:
-                    # Validate JSON inputs
-                    opening_time_map = validate_time_map(user_input[CONF_OPENING_TIME_MAP], "Opening")
-                    closing_time_map = validate_time_map(user_input[CONF_CLOSING_TIME_MAP], "Closing")
+                # Validate time maps
+                opening_time_map = validate_time_map(user_input[CONF_OPENING_TIME_MAP], "Opening")
+                closing_time_map = validate_time_map(user_input[CONF_CLOSING_TIME_MAP], "Closing")
                 
                 # Validate tilt times (properly handle None/empty values)
                 tilt_down = validate_tilt_time(user_input.get(CONF_TILTING_TIME_DOWN))
@@ -239,47 +224,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 
                 return self.async_create_entry(title=info[CONF_NAME], data=info)
 
-        data_schema = vol.Schema({
-            vol.Required(CONF_NAME): str,
-            vol.Optional(CONF_USE_EXISTING_COVER, default=False): bool,
-            # Cover entity option
-            vol.Optional(CONF_COVER_ENTITY_ID): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["cover"])
-            ),
-            # Switch entity options
-            vol.Optional(CONF_OPEN_SWITCH_ENTITY_ID): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(CONF_CLOSE_SWITCH_ENTITY_ID): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(CONF_STOP_SWITCH_ENTITY_ID): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(CONF_IS_BUTTON, default=False): bool,
-            vol.Optional("use_simple_mode", default=False): bool,
-            # Simple mode fields
-            vol.Optional("opening_total_time", default=10.0): vol.All(
-                vol.Coerce(float), vol.Range(min=0.1, max=3600)
-            ),
-            vol.Optional("opening_positions", default="0,100"): str,
-            vol.Optional("closing_total_time", default=10.0): vol.All(
-                vol.Coerce(float), vol.Range(min=0.1, max=3600)
-            ),
-            vol.Optional("closing_positions", default="100,0"): str,
-            # JSON mode fields
-            vol.Optional(
-                CONF_OPENING_TIME_MAP, 
-                default='{"0": 0, "10": 100}'
-            ): str,
-            vol.Optional(
-                CONF_CLOSING_TIME_MAP, 
-                default='{"0": 100, "10": 0}'
-            ): str,
-            # Tilt fields (optional, using string to allow empty values)
-            vol.Optional(CONF_TILTING_TIME_DOWN): str,
-            vol.Optional(CONF_TILTING_TIME_UP): str,
-        })
+        data_schema = self._get_user_schema(user_input)
 
         return self.async_show_form(
             step_id="user",
@@ -290,6 +235,43 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "closing_example": '{"0": 100, "8": 20, "10": 0}',
             },
         )
+
+    def _get_user_schema(self, user_input: dict[str, Any] | None = None) -> vol.Schema:
+        """Get the user schema with preserved values."""
+        if user_input is None:
+            user_input = {}
+            
+        return vol.Schema({
+            vol.Required(CONF_NAME, default=user_input.get(CONF_NAME, "")): str,
+            vol.Optional(CONF_USE_EXISTING_COVER, default=user_input.get(CONF_USE_EXISTING_COVER, False)): bool,
+            # Cover entity option
+            vol.Optional(CONF_COVER_ENTITY_ID, default=user_input.get(CONF_COVER_ENTITY_ID, "")): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain=["cover"])
+            ),
+            # Switch entity options
+            vol.Optional(CONF_OPEN_SWITCH_ENTITY_ID, default=user_input.get(CONF_OPEN_SWITCH_ENTITY_ID, "")): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+            ),
+            vol.Optional(CONF_CLOSE_SWITCH_ENTITY_ID, default=user_input.get(CONF_CLOSE_SWITCH_ENTITY_ID, "")): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+            ),
+            vol.Optional(CONF_STOP_SWITCH_ENTITY_ID, default=user_input.get(CONF_STOP_SWITCH_ENTITY_ID, "")): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
+            ),
+            vol.Optional(CONF_IS_BUTTON, default=user_input.get(CONF_IS_BUTTON, False)): bool,
+            # JSON fields
+            vol.Required(
+                CONF_OPENING_TIME_MAP, 
+                default=user_input.get(CONF_OPENING_TIME_MAP, '{"0": 0, "10": 100}')
+            ): str,
+            vol.Required(
+                CONF_CLOSING_TIME_MAP, 
+                default=user_input.get(CONF_CLOSING_TIME_MAP, '{"0": 100, "10": 0}')
+            ): str,
+            # Tilt fields (optional, using string to allow empty values)
+            vol.Optional(CONF_TILTING_TIME_DOWN, default=user_input.get(CONF_TILTING_TIME_DOWN, "")): str,
+            vol.Optional(CONF_TILTING_TIME_UP, default=user_input.get(CONF_TILTING_TIME_UP, "")): str,
+        })
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
@@ -361,14 +343,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except vol.Invalid as err:
                 return self.async_show_form(
                     step_id="reconfigure",
-                    data_schema=self._get_reconfigure_schema(config_entry.data),
+                    data_schema=self._get_reconfigure_schema(config_entry.data, user_input),
                     errors={"base": str(err)},
                 )
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 return self.async_show_form(
                     step_id="reconfigure",
-                    data_schema=self._get_reconfigure_schema(config_entry.data),
+                    data_schema=self._get_reconfigure_schema(config_entry.data, user_input),
                     errors={"base": "unknown"},
                 )
             else:
@@ -385,62 +367,66 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
-    def _get_reconfigure_schema(self, data: dict[str, Any]) -> vol.Schema:
+    def _get_reconfigure_schema(self, data: dict[str, Any], user_input: dict[str, Any] | None = None) -> vol.Schema:
         """Get the reconfigure schema with current values."""
+        # Use user_input if available (for form preservation), otherwise use saved data
+        if user_input is None:
+            user_input = {}
+        
         # Get current tilt values, handling None properly
-        current_tilt_down = data.get(CONF_TILTING_TIME_DOWN)
-        current_tilt_up = data.get(CONF_TILTING_TIME_UP)
+        current_tilt_down = user_input.get(CONF_TILTING_TIME_DOWN) or data.get(CONF_TILTING_TIME_DOWN)
+        current_tilt_up = user_input.get(CONF_TILTING_TIME_UP) or data.get(CONF_TILTING_TIME_UP)
         
         # Determine if currently using existing cover
-        has_cover_entity = data.get(CONF_COVER_ENTITY_ID) is not None
+        has_cover_entity = user_input.get(CONF_USE_EXISTING_COVER, data.get(CONF_COVER_ENTITY_ID) is not None)
         
         return vol.Schema({
-            vol.Required(CONF_NAME, default=data.get(CONF_NAME, "")): str,
+            vol.Required(CONF_NAME, default=user_input.get(CONF_NAME) or data.get(CONF_NAME, "")): str,
             vol.Optional(CONF_USE_EXISTING_COVER, default=has_cover_entity): bool,
             # Cover entity option
             vol.Optional(
                 CONF_COVER_ENTITY_ID,
-                default=data.get(CONF_COVER_ENTITY_ID, "")
+                default=user_input.get(CONF_COVER_ENTITY_ID) or data.get(CONF_COVER_ENTITY_ID, "")
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=["cover"])
             ),
             # Switch entity options
             vol.Optional(
                 CONF_OPEN_SWITCH_ENTITY_ID, 
-                default=data.get(CONF_OPEN_SWITCH_ENTITY_ID, "")
+                default=user_input.get(CONF_OPEN_SWITCH_ENTITY_ID) or data.get(CONF_OPEN_SWITCH_ENTITY_ID, "")
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
             ),
             vol.Optional(
                 CONF_CLOSE_SWITCH_ENTITY_ID, 
-                default=data.get(CONF_CLOSE_SWITCH_ENTITY_ID, "")
+                default=user_input.get(CONF_CLOSE_SWITCH_ENTITY_ID) or data.get(CONF_CLOSE_SWITCH_ENTITY_ID, "")
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
             ),
             vol.Optional(
                 CONF_STOP_SWITCH_ENTITY_ID, 
-                default=data.get(CONF_STOP_SWITCH_ENTITY_ID, "")
+                default=user_input.get(CONF_STOP_SWITCH_ENTITY_ID) or data.get(CONF_STOP_SWITCH_ENTITY_ID, "")
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
             ),
             vol.Optional(
                 CONF_IS_BUTTON, 
-                default=data.get(CONF_IS_BUTTON, False)
+                default=user_input.get(CONF_IS_BUTTON, data.get(CONF_IS_BUTTON, False))
             ): bool,
             vol.Required(
                 CONF_OPENING_TIME_MAP, 
-                default=json.dumps(data.get(CONF_OPENING_TIME_MAP, {"0": 0, "10": 100}))
+                default=user_input.get(CONF_OPENING_TIME_MAP) or json.dumps(data.get(CONF_OPENING_TIME_MAP, {"0": 0, "10": 100}))
             ): str,
             vol.Required(
                 CONF_CLOSING_TIME_MAP, 
-                default=json.dumps(data.get(CONF_CLOSING_TIME_MAP, {"0": 100, "10": 0}))
+                default=user_input.get(CONF_CLOSING_TIME_MAP) or json.dumps(data.get(CONF_CLOSING_TIME_MAP, {"0": 100, "10": 0}))
             ): str,
             vol.Optional(
                 CONF_TILTING_TIME_DOWN, 
-                default=current_tilt_down if current_tilt_down is not None else vol.UNDEFINED
+                default=str(current_tilt_down) if current_tilt_down is not None else ""
             ): str,  # Use string to allow empty values
             vol.Optional(
                 CONF_TILTING_TIME_UP, 
-                default=current_tilt_up if current_tilt_up is not None else vol.UNDEFINED
+                default=str(current_tilt_up) if current_tilt_up is not None else ""
             ): str,  # Use string to allow empty values
         })
