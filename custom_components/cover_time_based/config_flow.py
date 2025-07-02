@@ -80,6 +80,12 @@ def parse_flexible_json(json_str: str) -> dict:
 
 def validate_time_map(time_map_str: str, map_type: str) -> dict[float, int]:
     """Validate and parse time map from string."""
+    # Clean up the input string
+    time_map_str = time_map_str.strip()
+    
+    # Add debug info for troubleshooting
+    _LOGGER.debug(f"Validating {map_type} time map: {time_map_str[:100]}...")
+    
     try:
         time_map_raw = parse_flexible_json(time_map_str)
     except vol.Invalid as err:
@@ -92,7 +98,7 @@ def validate_time_map(time_map_str: str, map_type: str) -> dict[float, int]:
     try:
         time_map = {float(k): int(v) for k, v in time_map_raw.items()}
     except (ValueError, TypeError) as err:
-        raise vol.Invalid(f"Invalid time map format: {err}") from err
+        raise vol.Invalid(f"Invalid time map format: {err}. Raw data: {time_map_raw}") from err
     
     # Validate time map
     if not time_map:
@@ -103,9 +109,13 @@ def validate_time_map(time_map_str: str, map_type: str) -> dict[float, int]:
     times = sorted_times
     positions = [time_map[t] for t in times]
     
+    # Add debug logging
+    _LOGGER.debug(f"{map_type} time map - sorted times: {times}")
+    _LOGGER.debug(f"{map_type} time map - first time: {times[0]} (type: {type(times[0])})")
+    
     # Validate time progression
-    if times[0] != 0:
-        raise vol.Invalid(f"{map_type} time map must start at time 0")
+    if abs(times[0]) > 1e-10:  # Use small epsilon for floating point comparison
+        raise vol.Invalid(f"{map_type} time map must start at time 0 (found {times[0]}, sorted times: {times[:3]}...)")
     
     # Validate position range
     for pos in positions:
@@ -159,7 +169,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if use_existing_cover:
                     # Validate cover entity exists
                     cover_entity = user_input.get(CONF_COVER_ENTITY_ID)
-                    if not cover_entity:
+                    if not cover_entity or cover_entity.strip() == "":
                         raise vol.Invalid("Cover entity is required when using existing cover")
                     
                     if self.hass.states.get(cover_entity) is None:
@@ -176,9 +186,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     stop_entity = user_input.get(CONF_STOP_SWITCH_ENTITY_ID)
                     cover_entity = None
                     
-                    if not open_entity:
+                    if not open_entity or open_entity.strip() == "":
                         raise vol.Invalid("Open switch entity is required when not using existing cover")
-                    if not close_entity:
+                    if not close_entity or close_entity.strip() == "":
                         raise vol.Invalid("Close switch entity is required when not using existing cover")
                     
                     if self.hass.states.get(open_entity) is None:
@@ -187,7 +197,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if self.hass.states.get(close_entity) is None:
                         raise vol.Invalid(f"Close switch entity '{close_entity}' not found")
                     
-                    if stop_entity and self.hass.states.get(stop_entity) is None:
+                    if stop_entity and stop_entity.strip() != "" and self.hass.states.get(stop_entity) is None:
                         raise vol.Invalid(f"Stop switch entity '{stop_entity}' not found")
                 
                 # Validate time maps
@@ -287,7 +297,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if use_existing_cover:
                     # Validate cover entity exists
                     cover_entity = user_input.get(CONF_COVER_ENTITY_ID)
-                    if not cover_entity:
+                    if not cover_entity or cover_entity.strip() == "":
                         raise vol.Invalid("Cover entity is required when using existing cover")
                     
                     if self.hass.states.get(cover_entity) is None:
@@ -304,9 +314,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     stop_entity = user_input.get(CONF_STOP_SWITCH_ENTITY_ID)
                     cover_entity = None
                     
-                    if not open_entity:
+                    if not open_entity or open_entity.strip() == "":
                         raise vol.Invalid("Open switch entity is required when not using existing cover")
-                    if not close_entity:
+                    if not close_entity or close_entity.strip() == "":
                         raise vol.Invalid("Close switch entity is required when not using existing cover")
                     
                     if self.hass.states.get(open_entity) is None:
@@ -315,7 +325,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if self.hass.states.get(close_entity) is None:
                         raise vol.Invalid(f"Close switch entity '{close_entity}' not found")
                     
-                    if stop_entity and self.hass.states.get(stop_entity) is None:
+                    if stop_entity and stop_entity.strip() != "" and self.hass.states.get(stop_entity) is None:
                         raise vol.Invalid(f"Stop switch entity '{stop_entity}' not found")
                 
                 # Validate time maps
@@ -378,11 +388,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         current_tilt_up = user_input.get(CONF_TILTING_TIME_UP) or data.get(CONF_TILTING_TIME_UP)
         
         # Determine if currently using existing cover
-        has_cover_entity = user_input.get(CONF_USE_EXISTING_COVER, data.get(CONF_COVER_ENTITY_ID) is not None)
+        # Check user_input first, then check if data has a cover entity (backward compatibility)
+        use_existing_cover = user_input.get(CONF_USE_EXISTING_COVER)
+        if use_existing_cover is None:
+            use_existing_cover = data.get(CONF_COVER_ENTITY_ID) is not None
         
         return vol.Schema({
             vol.Required(CONF_NAME, default=user_input.get(CONF_NAME) or data.get(CONF_NAME, "")): str,
-            vol.Optional(CONF_USE_EXISTING_COVER, default=has_cover_entity): bool,
+            vol.Optional(CONF_USE_EXISTING_COVER, default=use_existing_cover): bool,
             # Cover entity option
             vol.Optional(
                 CONF_COVER_ENTITY_ID,
@@ -415,11 +428,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ): bool,
             vol.Required(
                 CONF_OPENING_TIME_MAP, 
-                default=user_input.get(CONF_OPENING_TIME_MAP) or json.dumps(data.get(CONF_OPENING_TIME_MAP, {"0": 0, "10": 100}))
+                default=user_input.get(CONF_OPENING_TIME_MAP) if user_input.get(CONF_OPENING_TIME_MAP) is not None else json.dumps(data.get(CONF_OPENING_TIME_MAP, {"0": 0, "10": 100}))
             ): str,
             vol.Required(
                 CONF_CLOSING_TIME_MAP, 
-                default=user_input.get(CONF_CLOSING_TIME_MAP) or json.dumps(data.get(CONF_CLOSING_TIME_MAP, {"0": 100, "10": 0}))
+                default=user_input.get(CONF_CLOSING_TIME_MAP) if user_input.get(CONF_CLOSING_TIME_MAP) is not None else json.dumps(data.get(CONF_CLOSING_TIME_MAP, {"0": 100, "10": 0}))
             ): str,
             vol.Optional(
                 CONF_TILTING_TIME_DOWN, 
