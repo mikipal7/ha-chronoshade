@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -140,7 +141,7 @@ def validate_time_map(time_map_str: str, map_type: str) -> dict[float, int]:
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Cover Time Based."""
 
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -233,8 +234,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                # Create unique ID based on name
-                await self.async_set_unique_id(user_input[CONF_NAME])
+                # Create unique ID based on name (stable across HA updates)
+                unique_id = re.sub(r'[^a-z0-9_]', '_', user_input[CONF_NAME].lower())
+                await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
                 
                 return self.async_create_entry(title=info[CONF_NAME], data=info)
@@ -296,6 +298,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle reconfiguration of the integration."""
         config_entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        errors: dict[str, str] = {}
         
         if user_input is not None:
             try:
@@ -336,9 +339,27 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if stop_entity and self.hass.states.get(stop_entity) is None:
                         raise vol.Invalid(f"Stop switch entity '{stop_entity}' not found")
                 
-                # Validate time maps
-                opening_time_map = validate_time_map(user_input[CONF_OPENING_TIME_MAP], "Opening")
-                closing_time_map = validate_time_map(user_input[CONF_CLOSING_TIME_MAP], "Closing")
+                # Determine configuration mode and validate time maps
+                simple_mode = user_input.get("use_simple_mode", False)
+                
+                if simple_mode:
+                    # Validate simple mode inputs
+                    opening_time_map = parse_time_map_input(
+                        "", True,
+                        user_input.get("opening_total_time", 10.0),
+                        user_input.get("opening_positions", "0,100"),
+                        "Opening"
+                    )
+                    closing_time_map = parse_time_map_input(
+                        "", True,
+                        user_input.get("closing_total_time", 10.0),
+                        user_input.get("closing_positions", "100,0"),
+                        "Closing"
+                    )
+                else:
+                    # Validate JSON inputs
+                    opening_time_map = validate_time_map(user_input[CONF_OPENING_TIME_MAP], "Opening")
+                    closing_time_map = validate_time_map(user_input[CONF_CLOSING_TIME_MAP], "Closing")
                 
                 # Validate tilt times (properly handle None/empty values)
                 tilt_down = validate_tilt_time(user_input.get(CONF_TILTING_TIME_DOWN))
@@ -359,18 +380,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
                 
             except vol.Invalid as err:
-                return self.async_show_form(
-                    step_id="reconfigure",
-                    data_schema=self._get_reconfigure_schema(config_entry.data),
-                    errors={"base": str(err)},
-                )
+                errors["base"] = str(err)
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
-                return self.async_show_form(
-                    step_id="reconfigure",
-                    data_schema=self._get_reconfigure_schema(config_entry.data),
-                    errors={"base": "unknown"},
-                )
+                errors["base"] = "unknown"
             else:
                 return self.async_update_reload_and_abort(
                     config_entry, data=info, reason="reconfigure_successful"
@@ -379,6 +392,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=self._get_reconfigure_schema(config_entry.data),
+            errors=errors,
             description_placeholders={
                 "opening_example": '{"0": 0, "5": 50, "10": 100}',
                 "closing_example": '{"0": 100, "8": 20, "10": 0}',
@@ -427,14 +441,26 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_IS_BUTTON, 
                 default=data.get(CONF_IS_BUTTON, False)
             ): bool,
-            vol.Required(
+            vol.Optional("use_simple_mode", default=False): bool,
+            # Simple mode fields
+            vol.Optional("opening_total_time", default=10.0): vol.All(
+                vol.Coerce(float), vol.Range(min=0.1, max=3600)
+            ),
+            vol.Optional("opening_positions", default="0,100"): str,
+            vol.Optional("closing_total_time", default=10.0): vol.All(
+                vol.Coerce(float), vol.Range(min=0.1, max=3600)
+            ),
+            vol.Optional("closing_positions", default="100,0"): str,
+            # JSON mode fields
+            vol.Optional(
                 CONF_OPENING_TIME_MAP, 
                 default=json.dumps(data.get(CONF_OPENING_TIME_MAP, {"0": 0, "10": 100}))
             ): str,
-            vol.Required(
+            vol.Optional(
                 CONF_CLOSING_TIME_MAP, 
                 default=json.dumps(data.get(CONF_CLOSING_TIME_MAP, {"0": 100, "10": 0}))
             ): str,
+            # Tilt fields (optional, using string to allow empty values)
             vol.Optional(
                 CONF_TILTING_TIME_DOWN, 
                 default=current_tilt_down if current_tilt_down is not None else vol.UNDEFINED

@@ -1,6 +1,7 @@
 """Cover time based with position-time maps"""
 
 import logging
+import re
 import time
 from asyncio import sleep
 from datetime import timedelta
@@ -527,7 +528,9 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         cover_entity_id,
     ):
         """Initialize the cover."""
-        self._unique_id = device_id
+        # Use name-based unique_id for stability across HA updates
+        self._unique_id = re.sub(r'[^a-z0-9_]', '_', name.lower())
+        self._device_id = device_id
         self._name = name or device_id
         
         # Initialize position calculator
@@ -576,7 +579,7 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
     def device_info(self) -> DeviceInfo:
         """Return device information."""
         return DeviceInfo(
-            identifiers={(DOMAIN, self._unique_id)},
+            identifiers={(DOMAIN, self._device_id)},
             name=self._name,
             manufacturer="Cover Time Based",
             model="Time-based Cover Controller",

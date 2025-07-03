@@ -126,3 +126,85 @@ Stop Entity: automation.emergency_stop
 3. **Test with actual scripts and automations**
 4. **Update documentation** to reflect new capabilities
 5. **Consider adding validation** for entity existence during configuration
+
+---
+
+# Latest Fixes (Current Session)
+
+## Issues Fixed
+
+### 6. ✅ Config Flow Reconfigure Problem
+**Problem**: When editing an existing device, the form required open/close/stop entities despite having "use existing cover" checked and a cover selected. This didn't happen during initial creation.
+
+**Root Cause**: The reconfigure method's validation logic was identical to the initial setup, but it didn't properly handle the conditional validation based on the "use existing cover" setting.
+
+**Solution**:
+- Updated `async_step_reconfigure` method in `config_flow.py` to properly handle the "use existing cover" option
+- Added support for simple mode configuration in reconfigure (was missing)
+- Fixed validation logic to skip switch entity requirements when "use existing cover" is checked
+- Updated `_get_reconfigure_schema` to include simple mode fields
+- Improved error handling in reconfigure flow
+
+**Files Modified**:
+- `custom_components/cover_time_based/config_flow.py`
+
+### 7. ✅ Devices Not Provided After Home Assistant Updates
+**Problem**: After Home Assistant updates, existing devices configured with this integration stopped working and showed as "not provided anymore". The only solution was to delete and recreate them.
+
+**Root Cause**: The unique_id was based on the config entry ID, which could change across Home Assistant updates, causing the system to lose track of existing entities.
+
+**Solution**:
+- Changed unique_id generation to be based on the device name instead of config entry ID
+- Implemented proper unique_id sanitization using regex to ensure valid characters
+- Added migration mechanism to handle existing installations
+- Updated config flow version from 1 to 2 to trigger migration
+- Added `async_migrate_entry` function to migrate existing entries to the new unique_id format
+
+**Files Modified**:
+- `custom_components/cover_time_based/cover.py`
+- `custom_components/cover_time_based/config_flow.py`
+- `custom_components/cover_time_based/__init__.py`
+
+## Technical Details
+
+### Unique ID Generation
+- **Old**: Used config entry ID (unstable across HA updates)
+- **New**: Uses sanitized device name (`re.sub(r'[^a-z0-9_]', '_', name.lower())`)
+- **Migration**: Automatically converts existing entries to new format
+
+### Config Flow Improvements
+- Enhanced validation logic for reconfigure flow
+- Added simple mode support in reconfigure
+- Improved error handling and user feedback
+- Maintained backward compatibility
+
+### Migration Strategy
+- Version bump from 1 to 2 triggers automatic migration
+- Preserves all existing configuration data
+- Updates unique_id to stable name-based format
+- Graceful fallback if migration fails
+
+## Testing Recommendations for Latest Fixes
+
+1. **Test Issue 6 Fix**:
+   - Create a new device using "existing cover" option
+   - Edit the device configuration
+   - Verify that switch entities are not required when "use existing cover" is checked
+
+2. **Test Issue 7 Fix**:
+   - Existing installations should automatically migrate on restart
+   - New installations should use stable unique_ids
+   - Devices should persist across Home Assistant updates
+
+## Backward Compatibility
+
+- All existing configurations will be automatically migrated
+- No manual intervention required from users
+- Configuration data remains unchanged
+- Only unique_id generation method is updated
+
+## Version Information
+
+- Config Flow Version: Updated from 1 to 2
+- Integration Version: 4.0.0 (unchanged)
+- Migration: Automatic on first load after update
