@@ -46,7 +46,6 @@ from .const import (
     CONF_STOP_SWITCH_ENTITY_ID,
     CONF_COVER_ENTITY_ID,
     CONF_IS_BUTTON,
-    CONF_DEVICE_CLASS,
     SERVICE_SET_KNOWN_POSITION,
     SERVICE_SET_KNOWN_TILT_POSITION,
     SERVICE_OPEN_SLACKS,
@@ -470,7 +469,6 @@ async def async_setup_entry(
         stop_switch_entity_id=config.get(CONF_STOP_SWITCH_ENTITY_ID),
         is_button=config.get(CONF_IS_BUTTON, False),
         cover_entity_id=config.get(CONF_COVER_ENTITY_ID),
-        device_class=config.get(CONF_DEVICE_CLASS, "blind"),  # Default for backwards compatibility
     )
     
     async_add_entities([cover])
@@ -528,15 +526,12 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         stop_switch_entity_id,
         is_button,
         cover_entity_id,
-        device_class="blind",
     ):
         """Initialize the cover."""
         # Use name-based unique_id for stability across HA updates
         self._unique_id = re.sub(r'[^a-z0-9_]', '_', name.lower())
         self._device_id = device_id
         self._name = name or device_id
-        # Handle device_class with backwards compatibility
-        self._device_class = device_class if device_class and device_class != "none" else None
         
         # Initialize position calculator
         self.position_calc = PositionCalculator(opening_time_map, closing_time_map)
@@ -594,57 +589,12 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
     @property
     def device_class(self):
         """Return the device class of the cover."""
-        return self._device_class
+        return None
     
     @property
     def extra_state_attributes(self):
         """Return the device state attributes."""
-        attributes = {
-            "friendly_name": self._name,
-            "device_class": self._device_class,
-        }
-        
-        # Add position information for voice assistants
-        current_position = self.current_cover_position
-        if current_position is not None:
-            attributes["current_position"] = current_position
-            # Add percentage for better Alexa integration
-            attributes["position"] = current_position
-            
-        # Add tilt information if supported
-        if self._has_tilt_support():
-            current_tilt = self.current_cover_tilt_position
-            if current_tilt is not None:
-                attributes["current_tilt_position"] = current_tilt
-                attributes["tilt_position"] = current_tilt
-        
-        # Add movement state for better status reporting
-        if self.position_calc.is_moving():
-            attributes["moving"] = True
-            attributes["movement_direction"] = self.position_calc._movement_direction
-        else:
-            attributes["moving"] = False
-            
-        # Add supported features for voice assistants
-        features = []
-        if self.supported_features & CoverEntityFeature.OPEN:
-            features.append("open")
-        if self.supported_features & CoverEntityFeature.CLOSE:
-            features.append("close")
-        if self.supported_features & CoverEntityFeature.STOP:
-            features.append("stop")
-        if self.supported_features & CoverEntityFeature.SET_POSITION:
-            features.append("set_position")
-        if self.supported_features & CoverEntityFeature.OPEN_TILT:
-            features.append("open_tilt")
-        if self.supported_features & CoverEntityFeature.CLOSE_TILT:
-            features.append("close_tilt")
-        if self.supported_features & CoverEntityFeature.SET_TILT_POSITION:
-            features.append("set_tilt_position")
-            
-        attributes["supported_features"] = features
-        
-        return attributes
+        return {}
     
     @property
     def current_cover_position(self) -> int | None:
@@ -678,18 +628,6 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
     def is_closed(self):
         """Return if the cover is closed."""
         return self.position_calc.is_closed()
-    
-    @property
-    def state(self):
-        """Return the state of the cover."""
-        if self.is_opening:
-            return "opening"
-        elif self.is_closing:
-            return "closing"
-        elif self.is_closed:
-            return "closed"
-        else:
-            return "open"
     
     @property
     def assumed_state(self):

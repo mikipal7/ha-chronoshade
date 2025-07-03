@@ -13,25 +13,9 @@ CONF_STOP_SWITCH_ENTITY_ID = "stop_switch_entity_id"
 CONF_IS_BUTTON = "is_button"
 CONF_COVER_ENTITY_ID = "cover_entity_id"
 CONF_USE_EXISTING_COVER = "use_existing_cover"
-CONF_DEVICE_CLASS = "device_class"
 
 # Default values
 DEFAULT_TILT_TIME = 5.0
-
-# Device classes for better voice assistant integration
-DEVICE_CLASS_OPTIONS = [
-    "blind",
-    "curtain", 
-    "shade",
-    "shutter",
-    "window",
-    "awning",
-    "damper",
-    "door",
-    "garage",
-    "gate",
-    "none"
-]
 
 # Services
 SERVICE_SET_KNOWN_POSITION = "set_known_position"

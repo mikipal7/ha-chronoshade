@@ -27,9 +27,7 @@ from .const import (
     CONF_IS_BUTTON,
     CONF_COVER_ENTITY_ID,
     CONF_USE_EXISTING_COVER,
-    CONF_DEVICE_CLASS,
     DEFAULT_TILT_TIME,
-    DEVICE_CLASS_OPTIONS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -228,7 +226,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_IS_BUTTON: user_input.get(CONF_IS_BUTTON, False),
                     CONF_TILTING_TIME_DOWN: tilt_down,
                     CONF_TILTING_TIME_UP: tilt_up,
-                    CONF_DEVICE_CLASS: user_input.get(CONF_DEVICE_CLASS, "blind"),
                 }
                 
             except vol.Invalid as err:
@@ -284,10 +281,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Tilt fields (optional, using string to allow empty values)
             vol.Optional(CONF_TILTING_TIME_DOWN): str,
             vol.Optional(CONF_TILTING_TIME_UP): str,
-            # Device class for voice assistant integration
-            vol.Optional(CONF_DEVICE_CLASS, default="blind"): selector.SelectSelector(
-                selector.SelectSelectorConfig(options=DEVICE_CLASS_OPTIONS)
-            ),
         })
 
         return self.async_show_form(
@@ -384,7 +377,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_IS_BUTTON: user_input.get(CONF_IS_BUTTON, False),
                     CONF_TILTING_TIME_DOWN: tilt_down,
                     CONF_TILTING_TIME_UP: tilt_up,
-                    CONF_DEVICE_CLASS: user_input.get(CONF_DEVICE_CLASS, "blind"),
                 }
                 
             except vol.Invalid as err:
@@ -477,11 +469,4 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_TILTING_TIME_UP, 
                 default=current_tilt_up if current_tilt_up is not None else vol.UNDEFINED
             ): str,  # Use string to allow empty values
-            # Device class for voice assistant integration
-            vol.Optional(
-                CONF_DEVICE_CLASS, 
-                default=data.get(CONF_DEVICE_CLASS, "blind")
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(options=DEVICE_CLASS_OPTIONS)
-            ),
         })
