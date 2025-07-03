@@ -320,3 +320,51 @@ The enhanced attributes provide voice assistants with detailed information about
 - Device type and classification
 
 This comprehensive state reporting helps voice assistants provide better user experiences and more accurate control options.
+
+---
+
+# Backwards Compatibility Fix (Critical)
+
+## Issue: Existing Covers Broken
+**Problem**: Adding device_class parameter broke existing cover configurations, requiring reconfiguration.
+
+## Solution: Multiple Safety Layers
+**Fixed**: Applied comprehensive backwards compatibility to ensure existing covers continue working.
+
+### 9. ✅ Backwards Compatibility Restoration
+**Changes Made**:
+
+#### Migration Enhancement
+- Enhanced migration function to automatically add `device_class: "blind"` to existing configs
+- Ensures all version 1 configs get the new field during upgrade
+
+#### Setup Entry Safety Check  
+- Added safety check in `async_setup_entry` to catch any configs that missed migration
+- Automatically adds missing `device_class` field with "blind" default
+- Updates config entry seamlessly
+
+#### Constructor Safety
+- Added default parameter `device_class="blind"` to CoverTimeBased constructor
+- Handles None values gracefully
+- Fully backwards compatible
+
+#### Config Flow Safety
+- Reconfigure schema uses safe defaults for missing device_class
+- No breaking changes for existing flows
+
+**Files Modified**:
+- `custom_components/cover_time_based/__init__.py` - Enhanced migration and setup safety
+- `custom_components/cover_time_based/cover.py` - Added constructor default and safety checks
+
+## Result: Zero Breaking Changes
+- ✅ **Existing covers work immediately** - no reconfiguration needed
+- ✅ **Automatic migration** - device_class added seamlessly  
+- ✅ **Multiple safety layers** - catches edge cases
+- ✅ **Default "blind" class** - provides best Alexa integration
+- ✅ **User choice preserved** - can change device class via reconfigure
+
+## For Users:
+1. **Simply restart Home Assistant** - migration happens automatically
+2. **All covers should work normally** - no action required
+3. **Enhanced Alexa integration** - automatically enabled with "blind" default
+4. **Optional**: Reconfigure to choose different device class if desired

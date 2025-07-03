@@ -470,7 +470,7 @@ async def async_setup_entry(
         stop_switch_entity_id=config.get(CONF_STOP_SWITCH_ENTITY_ID),
         is_button=config.get(CONF_IS_BUTTON, False),
         cover_entity_id=config.get(CONF_COVER_ENTITY_ID),
-        device_class=config.get(CONF_DEVICE_CLASS, "blind"),
+        device_class=config.get(CONF_DEVICE_CLASS, "blind"),  # Default for backwards compatibility
     )
     
     async_add_entities([cover])
@@ -535,7 +535,8 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         self._unique_id = re.sub(r'[^a-z0-9_]', '_', name.lower())
         self._device_id = device_id
         self._name = name or device_id
-        self._device_class = device_class if device_class != "none" else None
+        # Handle device_class with backwards compatibility
+        self._device_class = device_class if device_class and device_class != "none" else None
         
         # Initialize position calculator
         self.position_calc = PositionCalculator(opening_time_map, closing_time_map)
