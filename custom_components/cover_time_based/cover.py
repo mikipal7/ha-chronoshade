@@ -2,13 +2,13 @@
 
 import logging
 import re
-import time
 from asyncio import sleep
 from datetime import timedelta
 from typing import Dict, Optional, Tuple
 
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
+from homeassistant.util import dt as dt_util
 from homeassistant.components.cover import (
     ATTR_CURRENT_POSITION,
     ATTR_CURRENT_TILT_POSITION,
@@ -242,7 +242,7 @@ class PositionCalculator:
         
         self._is_moving = True
         self._movement_direction = "opening"
-        self._movement_start_time = time.time()
+        self._movement_start_time = dt_util.utcnow().timestamp()
         self._start_position = self._current_position
         self._target_position = target_position
         self._movement_duration = self._calculate_movement_duration(
@@ -258,7 +258,7 @@ class PositionCalculator:
         
         self._is_moving = True
         self._movement_direction = "closing"
-        self._movement_start_time = time.time()
+        self._movement_start_time = dt_util.utcnow().timestamp()
         self._start_position = self._current_position
         self._target_position = target_position
         self._movement_duration = self._calculate_movement_duration(
@@ -272,7 +272,7 @@ class PositionCalculator:
         if not self._is_moving:
             return self._current_position
         
-        elapsed_time = time.time() - self._movement_start_time
+        elapsed_time = dt_util.utcnow().timestamp() - self._movement_start_time
         
         # Calculate progress as a ratio (0.0 to 1.0)
         if self._movement_duration > 0:
@@ -299,7 +299,7 @@ class PositionCalculator:
         current_pos = self.get_current_position()
         
         # Check if we've reached the target position or time
-        elapsed_time = time.time() - self._movement_start_time
+        elapsed_time = dt_util.utcnow().timestamp() - self._movement_start_time
         time_reached = elapsed_time >= self._movement_duration
         
         if self._movement_direction == "opening":
@@ -355,7 +355,7 @@ class TiltCalculator:
         
         self._is_moving = True
         self._movement_direction = "opening"
-        self._movement_start_time = time.time()
+        self._movement_start_time = dt_util.utcnow().timestamp()
         self._target_position = target_position
     
     def start_closing(self, target_position: int = 0):
@@ -365,7 +365,7 @@ class TiltCalculator:
         
         self._is_moving = True
         self._movement_direction = "closing"
-        self._movement_start_time = time.time()
+        self._movement_start_time = dt_util.utcnow().timestamp()
         self._target_position = target_position
     
     def get_current_position(self) -> int:
@@ -373,7 +373,7 @@ class TiltCalculator:
         if not self._is_moving:
             return self._current_position
         
-        elapsed_time = time.time() - self._movement_start_time
+        elapsed_time = dt_util.utcnow().timestamp() - self._movement_start_time
         
         if self._movement_direction == "opening":
             total_time = self._tilt_time_up
