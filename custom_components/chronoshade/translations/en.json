@@ -1,0 +1,177 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Cover Time Based - Control Method",
+        "description": "Choose how you want to control your cover.",
+        "data": {
+          "control_method": "Control Method"
+        }
+      },
+      "switches": {
+        "title": "Cover Time Based - Switch Configuration Mode",
+        "description": "Choose how you want to configure your switch-based cover.",
+        "data": {
+          "config_mode": "Configuration Mode"
+        }
+      },
+      "switches_standard": {
+        "title": "Cover Time Based - Standard Switch Setup",
+        "description": "Simple configuration with basic timing settings.\nJust specify how long it takes to fully open and close your cover.",
+        "data": {
+          "name": "Cover Name",
+          "open_switch_entity_id": "Open Switch/Script/Automation",
+          "close_switch_entity_id": "Close Switch/Script/Automation",
+          "stop_switch_entity_id": "Stop Switch/Script/Automation (Optional)",
+          "is_button": "Entities are momentary buttons (auto turn off)",
+          "opening_time": "Time to fully open (seconds)",
+          "closing_time": "Time to fully close (seconds)",
+          "tilting_time_down": "Tilt Down Time (seconds, optional)",
+          "tilting_time_up": "Tilt Up Time (seconds, optional)"
+        }
+      },
+      "switches_advanced": {
+        "title": "Cover Time Based - Advanced Switch Setup",
+        "description": "Full control with custom time maps in JSON format.\nExample: {\"0\": 0, \"5\": 50, \"10\": 100} means:\n- At 0 seconds: position 0%\n- At 5 seconds: position 50%\n- At 10 seconds: position 100%",
+        "data": {
+          "name": "Cover Name",
+          "open_switch_entity_id": "Open Switch/Script/Automation",
+          "close_switch_entity_id": "Close Switch/Script/Automation",
+          "stop_switch_entity_id": "Stop Switch/Script/Automation (Optional)",
+          "is_button": "Entities are momentary buttons (auto turn off)",
+          "opening_time_map": "Opening Time Map (JSON)",
+          "closing_time_map": "Closing Time Map (JSON)",
+          "tilting_time_down": "Tilt Down Time (seconds, optional)",
+          "tilting_time_up": "Tilt Up Time (seconds, optional)"
+        }
+      },
+      "switches_automatic": {
+        "title": "Cover Time Based - Automatic Switch Setup",
+        "description": "Quick setup with automatic detection and default settings.\nPerfect for getting started quickly - you can customize later.",
+        "data": {
+          "name": "Cover Name",
+          "open_switch_entity_id": "Open Switch/Script/Automation",
+          "close_switch_entity_id": "Close Switch/Script/Automation",
+          "stop_switch_entity_id": "Stop Switch/Script/Automation (Optional)"
+        }
+      },
+      "existing_cover": {
+        "title": "Cover Time Based - Existing Cover Configuration Mode",
+        "description": "Choose how you want to configure your existing cover entity.",
+        "data": {
+          "config_mode": "Configuration Mode"
+        }
+      },
+      "existing_cover_standard": {
+        "title": "Cover Time Based - Standard Existing Cover Setup",
+        "description": "Simple configuration with basic timing settings.\nJust specify how long it takes to fully open and close your cover.",
+        "data": {
+          "name": "Cover Name",
+          "cover_entity_id": "Existing Cover Entity",
+          "opening_time": "Time to fully open (seconds)",
+          "closing_time": "Time to fully close (seconds)",
+          "tilting_time_down": "Tilt Down Time (seconds, optional)",
+          "tilting_time_up": "Tilt Up Time (seconds, optional)"
+        }
+      },
+      "existing_cover_advanced": {
+        "title": "Cover Time Based - Advanced Existing Cover Setup",
+        "description": "Full control with custom time maps in JSON format.\nExample: {\"0\": 0, \"5\": 50, \"10\": 100} means:\n- At 0 seconds: position 0%\n- At 5 seconds: position 50%\n- At 10 seconds: position 100%",
+        "data": {
+          "name": "Cover Name",
+          "cover_entity_id": "Existing Cover Entity",
+          "opening_time_map": "Opening Time Map (JSON)",
+          "closing_time_map": "Closing Time Map (JSON)",
+          "tilting_time_down": "Tilt Down Time (seconds, optional)",
+          "tilting_time_up": "Tilt Up Time (seconds, optional)"
+        }
+      },
+      "existing_cover_automatic": {
+        "title": "Cover Time Based - Automatic Existing Cover Setup",
+        "description": "Quick setup with automatic detection and default settings.\nPerfect for getting started quickly - you can customize later.",
+        "data": {
+          "name": "Cover Name",
+          "cover_entity_id": "Existing Cover Entity"
+        }
+      },
+      "reconfigure_switches": {
+        "title": "Reconfigure Cover Time Based - Switches",
+        "description": "Update the configuration for your switch-based cover.\n\nTime maps define position at specific time intervals in JSON format.\nExample: {\"0\": 0, \"5\": 50, \"10\": 100} means:\n- At 0 seconds: position 0%\n- At 5 seconds: position 50%\n- At 10 seconds: position 100%",
+        "data": {
+          "name": "Cover Name",
+          "open_switch_entity_id": "Open Switch/Script/Automation",
+          "close_switch_entity_id": "Close Switch/Script/Automation",
+          "stop_switch_entity_id": "Stop Switch/Script/Automation (Optional)",
+          "is_button": "Entities are momentary buttons (auto turn off)",
+          "opening_time_map": "Opening Time Map (JSON)",
+          "closing_time_map": "Closing Time Map (JSON)",
+          "tilting_time_down": "Tilt Down Time (seconds, optional)",
+          "tilting_time_up": "Tilt Up Time (seconds, optional)"
+        }
+      },
+      "reconfigure_existing_cover": {
+        "title": "Reconfigure Cover Time Based - Existing Cover",
+        "description": "Update the configuration for your existing cover entity.\n\nTime maps define position at specific time intervals in JSON format.\nExample: {\"0\": 0, \"5\": 50, \"10\": 100} means:\n- At 0 seconds: position 0%\n- At 5 seconds: position 50%\n- At 10 seconds: position 100%",
+        "data": {
+          "name": "Cover Name",
+          "cover_entity_id": "Existing Cover Entity",
+          "opening_time_map": "Opening Time Map (JSON)",
+          "closing_time_map": "Closing Time Map (JSON)",
+          "tilting_time_down": "Tilt Down Time (seconds, optional)",
+          "tilting_time_up": "Tilt Up Time (seconds, optional)"
+        }
+      }
+    },
+    "error": {
+      "unknown": "An unexpected error occurred",
+      "entry_not_found": "Configuration entry not found",
+      "unexpected_error": "Unexpected error: {error}"
+    },
+    "abort": {
+      "already_configured": "A cover with this name is already configured",
+      "reconfigure_successful": "Configuration updated successfully"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Cover Time Based - Advanced Options",
+        "description": "Configure advanced tilt options for your cover.",
+        "data": {
+          "tilting_time_down": "Tilt Down Time (seconds, leave empty to disable)",
+          "tilting_time_up": "Tilt Up Time (seconds, leave empty to disable)"
+        }
+      }
+    }
+  },
+  "services": {
+    "set_known_position": {
+      "name": "Set Known Position",
+      "description": "Manually set the current position of the cover without moving it. Useful for calibration.",
+      "fields": {
+        "entity_id": {
+          "name": "Entity ID",
+          "description": "The cover entity to set the position for."
+        },
+        "position": {
+          "name": "Position",
+          "description": "The current position of the cover (0-100%)."
+        }
+      }
+    },
+    "set_known_tilt_position": {
+      "name": "Set Known Tilt Position",
+      "description": "Manually set the current tilt position of the cover without moving it. Useful for calibration.",
+      "fields": {
+        "entity_id": {
+          "name": "Entity ID",
+          "description": "The cover entity to set the tilt position for."
+        },
+        "position": {
+          "name": "Tilt Position",
+          "description": "The current tilt position of the cover (0-100%)."
+        }
+      }
+    }
+  }
+}

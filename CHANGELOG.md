@@ -1,69 +1,57 @@
-## 2.3.1 (2025-05-01)
+# Changelog
 
-### Bug Fixes
+All notable changes to ChronoShade will be documented in this file.
 
-- Internal position flipped after restart (@gbasile)
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2025-01-04
 
-## 2.3.0 (2025-03-27)
+### 🎉 Initial Release - ChronoShade
 
-### Features
+This is the inaugural release of **ChronoShade**, a complete rebrand and enhancement of the former Cover Time Based integration.
 
-- Add support for existing cover entities
+### ✨ Added
+- **Brand New Identity**: Complete rebrand to ChronoShade with modern branding
+- **Enhanced UI**: Beautiful config flow with improved user experience
+- **Dual Configuration Modes**: 
+  - Simple Mode: Easy setup for linear covers
+  - Advanced Mode: Full JSON time map control
+- **Precision Control**: Advanced position-time mapping for accurate cover positioning
+- **Modern Documentation**: Comprehensive README with examples and troubleshooting
+- **Service Integration**: Custom services for position calibration
+- **Flexible Control Methods**: Support for both individual switches and existing cover entities
 
-### Bug Fixes
+### 🔧 Technical Improvements
+- **Domain Change**: Migrated from `cover_time_based` to `chronoshade`
+- **Enhanced Validation**: Improved time map validation with detailed error messages
+- **Better Error Handling**: More informative error messages and troubleshooting
+- **Code Modernization**: Updated codebase with latest Home Assistant standards
 
-- Internal position state is flipped after `xnkx` update
+### 🎯 Features
+- Non-linear movement profiles with custom time maps
+- Accurate position tracking and interpolation
+- Target positioning with precise movement control
+- State persistence across Home Assistant restarts
+- Optional tilt support for venetian blinds
+- Button-style switch support with auto-off functionality
+- Real-time position calculation and updates
 
+### 📚 Documentation
+- Complete README overhaul with modern styling
+- Comprehensive configuration examples
+- Troubleshooting guide
+- Service documentation
+- Migration guide from previous versions
 
-## 2.2.0 (2025-03-24)
+### 🛠️ Configuration
+- Intuitive config flow with step-by-step setup
+- Real-time validation of time maps
+- Support for both YAML and UI configuration
+- Backward compatibility with existing configurations
 
-### Features
+---
 
-- Add support for button based cover controls (#17)
+**ChronoShade v1.0.0** - *Precision in every movement* ⏱️
 
-### Bug Fixes
-
-- current_position is None comparison exceptions (#18)
-- Update `xknx` to latest version
-- Update service schema for 2025.09
-
-
-## 2.1.1 (2024-04-17)
-
-### Bug Fixes
-
-- Fix `stop_switch_entity_id` not being present causing the integration to crash
-
-
-## 2.1.0 (2024-04-11)
-
-### Features
-
-- Add optional `stop_switch_entity_id` for stopping the cover
-
-### Bug Fixes
-
-- Fix an issue where the integration would not load when the tilting entities were not present
-- Fix check for tilt support when stopping (#7)
-
-
-## 2.0.1 (2024-01-05)
-
-### Bug Fixes
-
-- Fix `hacs.json` & `manifest.json` for HACS support
-
-
-## 2.0.0 (2023-10-06)
-
-### Features
-
-- Add tilt support
-- HACS support
-
-## 1.0.0 (2023-10-02)
-
-### Features
-
-- Initial Release based on [davidramosweb/home-assistant-custom-components-cover-time-based](https://github.com/davidramosweb/home-assistant-custom-components-cover-time-based)
+For installation instructions and configuration examples, see the [README](README.md).

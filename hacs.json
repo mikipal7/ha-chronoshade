@@ -1,5 +1,5 @@
 {
-  "name": "Cover Time Based",
+  "name": "ChronoShade",
   "render_readme": true,
   "hacs": "1.6.0",
   "homeassistant": "2024.1.0"

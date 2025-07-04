@@ -1,133 +1,107 @@
-# Home Assistant Cover Time Based (v3.0)
+# ChronoShade 🕐
 
-A Home Assistant custom component for time-based cover control with **position-time maps** for accurate, non-linear movement tracking.
+[![GitHub Release][releases-shield]][releases]
+[![GitHub Activity][commits-shield]][commits]
+[![License][license-shield]](LICENSE)
+[![hacs][hacsbadge]][hacs]
 
-## ⚠️ Breaking Changes in v3.0
+**ChronoShade** is a precision time-based cover control integration for Home Assistant that revolutionizes how you manage blinds, shutters, and other covers. Unlike traditional cover controls that rely on simple open/close commands, ChronoShade uses advanced **position-time mapping** to provide accurate, non-linear movement tracking for perfect cover positioning every time.
 
-This version completely redesigns the position calculation system:
+## ✨ Key Features
 
-- **REMOVED**: `travelling_time_down`, `travelling_time_up`, `opening_delay`, `closing_delay`
-- **ADDED**: `opening_time_map` and `closing_time_map` (required)
-- **REMOVED**: XKNX dependency
-- **KEPT**: Tilt functionality with linear timing (unchanged)
+- 🎯 **Precision Control**: Define exact positions at specific time intervals
+- 📊 **Non-Linear Movement**: Model real-world cover behavior with custom time maps
+- 🔄 **Dual Control Methods**: Use existing covers or individual switch entities
+- 🎛️ **Tilt Support**: Full tilt position control for venetian blinds
+- 🚀 **Easy Setup**: Simple mode for quick configuration, advanced mode for power users
+- 🔧 **Flexible Integration**: Works with switches, scripts, automations, and existing covers
+- 📱 **Modern UI**: Beautiful config flow with real-time validation
 
-## Features
+## 🚀 Quick Start
 
-- **Non-linear movement profiles**: Define exact position at specific time intervals
-- **Accurate position tracking**: Real-world cover behavior modeling
-- **Interpolation**: Smooth position calculation between defined points
-- **Target positioning**: Precise movement to any position
-- **State persistence**: Position recovery after Home Assistant restart
-- **Tilt support**: Optional linear tilt control
-- **Switch or entity control**: Support for both switch-based and entity-based covers
+### HACS Installation (Recommended)
 
-## Installation
-
-### HACS (Recommended)
-1. Add this repository to HACS as a custom repository
-2. Install "Cover Time Based" from HACS
-3. Restart Home Assistant
+1. Open HACS in Home Assistant
+2. Go to "Integrations"
+3. Click the three dots menu → "Custom repositories"
+4. Add `https://github.com/mikipal7/ha-chronoshade` as an Integration
+5. Search for "ChronoShade" and install
+6. Restart Home Assistant
+7. Go to Settings → Devices & Services → Add Integration
+8. Search for "ChronoShade"
 
 ### Manual Installation
-1. Copy the `custom_components/cover_time_based` folder to your Home Assistant `custom_components` directory
-2. Restart Home Assistant
 
-## Configuration
+1. Download the latest release
+2. Copy `custom_components/chronoshade` to your Home Assistant `custom_components` directory
+3. Restart Home Assistant
+4. Add the integration via the UI
 
-### Basic Configuration
+## 📖 Configuration
 
-```yaml
-cover:
-  - platform: cover_time_based
-    devices:
-      bedroom_cover:
-        name: "Bedroom Cover"
-        open_switch_entity_id: switch.bedroom_cover_open
-        close_switch_entity_id: switch.bedroom_cover_close
-        stop_switch_entity_id: switch.bedroom_cover_stop  # optional
-        opening_time_map:
-          0: 0    # At 0 seconds, position is 0% (closed)
-          10: 100 # At 10 seconds, position is 100% (open)
-        closing_time_map:
-          0: 100  # At 0 seconds, position is 100% (open)
-          10: 0   # At 10 seconds, position is 0% (closed)
+ChronoShade offers two configuration modes:
+
+### Simple Mode (Recommended for beginners)
+Perfect for covers with linear movement:
+- Enter total opening/closing time
+- System automatically creates optimal time maps
+
+### Advanced Mode (For power users)
+Full control with JSON time maps:
+```json
+{
+  "0": 0,    // At 0 seconds: 0% (closed)
+  "5": 30,   // At 5 seconds: 30% open
+  "10": 80,  // At 10 seconds: 80% open
+  "15": 100  // At 15 seconds: 100% (fully open)
+}
 ```
 
-### Non-Linear Movement Example
+## 🎛️ Control Methods
 
+### Method 1: Individual Switches
+Use separate entities for open/close/stop operations:
+- **Open Entity**: Switch, script, or automation to open the cover
+- **Close Entity**: Switch, script, or automation to close the cover
+- **Stop Entity**: (Optional) Entity to stop movement
+
+### Method 2: Existing Cover
+Enhance an existing Home Assistant cover entity with precision timing.
+
+## 🔧 Services
+
+ChronoShade provides custom services for advanced control:
+
+### `chronoshade.set_known_position`
+Set a known position for calibration:
 ```yaml
-cover:
-  - platform: cover_time_based
-    devices:
-      living_room_cover:
-        name: "Living Room Cover"
-        open_switch_entity_id: switch.living_room_cover_open
-        close_switch_entity_id: switch.living_room_cover_close
-        opening_time_map:
-          0: 0    # Start closed
-          3: 20   # After 3s, 20% open (slow start)
-          6: 50   # After 6s, 50% open
-          8: 80   # After 8s, 80% open (slowing down)
-          10: 100 # After 10s, fully open
-        closing_time_map:
-          0: 100  # Start open
-          2: 80   # After 2s, 80% open (fast start)
-          5: 50   # After 5s, 50% open
-          8: 20   # After 8s, 20% open
-          10: 0   # After 10s, fully closed
+service: chronoshade.set_known_position
+data:
+  entity_id: cover.bedroom_blinds
+  position: 50
 ```
 
-### With Tilt Support
-
+### `chronoshade.set_known_tilt_position`
+Set a known tilt position:
 ```yaml
-cover:
-  - platform: cover_time_based
-    devices:
-      office_blinds:
-        name: "Office Blinds"
-        open_switch_entity_id: switch.office_blinds_open
-        close_switch_entity_id: switch.office_blinds_close
-        opening_time_map:
-          0: 0
-          8: 100
-        closing_time_map:
-          0: 100
-          8: 0
-        tilting_time_down: 2.0  # 2 seconds to fully tilt down
-        tilting_time_up: 2.0    # 2 seconds to fully tilt up
+service: chronoshade.set_known_tilt_position
+data:
+  entity_id: cover.bedroom_blinds
+  position: 75
 ```
 
-### Using Existing Cover Entity
+## 📊 Example Configurations
 
+### Basic Linear Cover
 ```yaml
+# Configuration.yaml (if using YAML)
 cover:
-  - platform: cover_time_based
+  - platform: chronoshade
     devices:
-      garage_door:
-        name: "Garage Door"
-        cover_entity_id: cover.garage_door_original
-        opening_time_map:
-          0: 0
-          2: 10   # Slow start
-          5: 50   # Mid-point
-          12: 90  # Almost open
-          15: 100 # Fully open
-        closing_time_map:
-          0: 100
-          15: 0   # Linear closing
-```
-
-### Button-Style Switches
-
-```yaml
-cover:
-  - platform: cover_time_based
-    devices:
-      patio_cover:
-        name: "Patio Cover"
-        open_switch_entity_id: switch.patio_cover_open
-        close_switch_entity_id: switch.patio_cover_close
-        is_button: true  # Switches turn off automatically after 1 second
+      living_room_blinds:
+        name: "Living Room Blinds"
+        open_switch_entity_id: switch.blinds_open
+        close_switch_entity_id: switch.blinds_close
         opening_time_map:
           0: 0
           12: 100
@@ -136,153 +110,80 @@ cover:
           12: 0
 ```
 
-## Configuration Parameters
-
-### Required Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `name` | string | Display name for the cover |
-| `opening_time_map` | dict | Time-to-position mapping for opening movement |
-| `closing_time_map` | dict | Time-to-position mapping for closing movement |
-
-### Switch-Based Covers
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `open_switch_entity_id` | string | - | Entity ID for open switch |
-| `close_switch_entity_id` | string | - | Entity ID for close switch |
-| `stop_switch_entity_id` | string | None | Entity ID for stop switch (optional) |
-| `is_button` | boolean | false | If true, switches auto-turn off after 1 second |
-
-### Entity-Based Covers
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `cover_entity_id` | string | - | Entity ID of existing cover to control |
-
-### Optional Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `tilting_time_down` | float | None | Time in seconds for full tilt down |
-| `tilting_time_up` | float | None | Time in seconds for full tilt up |
-
-## Time Maps
-
-Time maps define the relationship between elapsed time and cover position:
-
-- **Keys**: Time in seconds (must start with 0)
-- **Values**: Position percentage (0-100, where 0=closed, 100=open)
-- **Opening maps**: Must start at position 0 and end at position 100
-- **Closing maps**: Must start at position 100 and end at position 0
-- **Positions must be monotonic** (non-decreasing for opening, non-increasing for closing)
-
-### Examples
-
-**Linear movement:**
+### Advanced Non-Linear Cover
+Perfect for covers that move faster at the beginning:
 ```yaml
-opening_time_map:
-  0: 0
-  10: 100
+cover:
+  - platform: chronoshade
+    devices:
+      bedroom_shutters:
+        name: "Bedroom Shutters"
+        open_switch_entity_id: script.shutters_open
+        close_switch_entity_id: script.shutters_close
+        stop_switch_entity_id: script.shutters_stop
+        opening_time_map:
+          0: 0     # Closed
+          3: 40    # Fast initial movement
+          8: 70    # Slower middle section
+          15: 100  # Final positioning
+        closing_time_map:
+          0: 100   # Open
+          4: 60    # Quick start
+          10: 30   # Gradual closing
+          15: 0    # Fully closed
+        tilting_time_down: 2.5
+        tilting_time_up: 2.5
 ```
 
-**Fast start, slow finish:**
-```yaml
-opening_time_map:
-  0: 0
-  2: 40
-  5: 70
-  8: 90
-  10: 100
-```
+## 🎯 Why ChronoShade?
 
-**Slow start, fast finish:**
-```yaml
-opening_time_map:
-  0: 0
-  5: 20
-  7: 50
-  9: 90
-  10: 100
-```
+Traditional cover integrations assume linear movement, but real covers don't work that way:
+- **Motors vary in speed** during operation
+- **Mechanical resistance** changes throughout the movement
+- **Weight distribution** affects movement patterns
+- **Wear and age** impact timing
 
-## Services
+ChronoShade solves this by letting you map the **actual behavior** of your covers, ensuring perfect positioning every time.
 
-### `cover_time_based.set_known_position`
-Set a known position for the cover (useful for calibration).
+## 🔍 Troubleshooting
 
-```yaml
-service: cover_time_based.set_known_position
-target:
-  entity_id: cover.bedroom_cover
-data:
-  position: 50
-```
+### Cover doesn't reach the exact position
+1. Use the `set_known_position` service to calibrate
+2. Adjust your time maps based on observed behavior
+3. Consider mechanical factors like friction and wear
 
-### `cover_time_based.set_known_tilt_position`
-Set a known tilt position for the cover.
+### Tilt function not working
+1. Ensure `tilting_time_down` and `tilting_time_up` are configured
+2. Verify your cover supports tilt operations
+3. Check that tilt commands are properly mapped to your hardware
 
-```yaml
-service: cover_time_based.set_known_tilt_position
-target:
-  entity_id: cover.office_blinds
-data:
-  position: 75
-```
+### Integration not appearing
+1. Verify the `custom_components/chronoshade` directory exists
+2. Check Home Assistant logs for errors
+3. Ensure you've restarted Home Assistant after installation
 
-## Migration from v2.x
+## 🤝 Contributing
 
-1. **Remove old parameters** from your configuration:
-   - `travelling_time_down`
-   - `travelling_time_up`
-   - `opening_delay`
-   - `closing_delay`
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
 
-2. **Add time maps** based on your old travel times:
-   ```yaml
-   # Old configuration:
-   travelling_time_down: 15
-   travelling_time_up: 12
-   
-   # New configuration:
-   opening_time_map:
-     0: 0
-     12: 100
-   closing_time_map:
-     0: 100
-     15: 0
-   ```
+## 📄 License
 
-3. **Test and adjust** time maps to match your cover's actual behavior
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Troubleshooting
+## 🙏 Acknowledgments
 
-### Cover doesn't move to correct position
-- Check that your time maps accurately reflect your cover's movement
-- Use the `set_known_position` service to calibrate
-- Verify time map validation rules are followed
+- Built for the Home Assistant community
+- Inspired by real-world cover control challenges
+- Thanks to all contributors and testers
 
-### Position tracking is inaccurate
-- Measure actual movement times and update time maps
-- Consider non-linear movement patterns
-- Add more time points for better accuracy
+---
 
-### Cover stops at wrong position
-- Check for obstacles or mechanical issues
-- Verify target position calculation with debug logs
-- Ensure time maps are monotonic
+**ChronoShade** - *Precision in every movement* ⏱️
 
-## Debug Logging
-
-Add to your `configuration.yaml`:
-
-```yaml
-logger:
-  logs:
-    custom_components.cover_time_based: debug
-```
-
-## License
-
-This project is licensed under the MIT License.
+[releases-shield]: https://img.shields.io/github/release/mikipal7/ha-chronoshade.svg?style=for-the-badge
+[releases]: https://github.com/mikipal7/ha-chronoshade/releases
+[commits-shield]: https://img.shields.io/github/commit-activity/y/mikipal7/ha-chronoshade.svg?style=for-the-badge
+[commits]: https://github.com/mikipal7/ha-chronoshade/commits/main
+[license-shield]: https://img.shields.io/github/license/mikipal7/ha-chronoshade.svg?style=for-the-badge
+[hacs]: https://github.com/hacs/integration
+[hacsbadge]: https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge

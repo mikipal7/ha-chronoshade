@@ -1,6 +1,6 @@
-"""Constants for Cover Time Based integration."""
+"""Constants for ChronoShade integration."""
 
-DOMAIN = "cover_time_based"
+DOMAIN = "chronoshade"
 
 # Configuration keys
 CONF_OPENING_TIME_MAP = "opening_time_map"
@@ -30,8 +30,8 @@ SERVICE_SET_KNOWN_POSITION = "set_known_position"
 SERVICE_SET_KNOWN_TILT_POSITION = "set_known_tilt_position"
 
 # Device info
-MANUFACTURER = "Cover Time Based"
-MODEL = "Time-based Cover Controller"
+MANUFACTURER = "ChronoShade"
+MODEL = "Precision Time-based Cover Controller"
 
 # Migration
 CURRENT_CONFIG_VERSION = 3

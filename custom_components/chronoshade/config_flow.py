@@ -1,4 +1,4 @@
-"""Config flow for Cover Time Based integration."""
+"""Config flow for ChronoShade integration."""
 from __future__ import annotations
 
 import json

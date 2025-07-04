@@ -1,6 +1,6 @@
-# Example configuration for testing the migration helper
+# Example configuration for ChronoShade
 cover:
-  - platform: cover_time_based
+  - platform: chronoshade
     devices:
       bedroom_cover:
         name: "Bedroom Cover"
