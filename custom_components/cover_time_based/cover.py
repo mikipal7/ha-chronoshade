@@ -46,11 +46,13 @@ from .const import (
     CONF_STOP_SWITCH_ENTITY_ID,
     CONF_COVER_ENTITY_ID,
     CONF_IS_BUTTON,
+    CONF_CONTROL_METHOD,
+    CONTROL_METHOD_SWITCHES,
+    CONTROL_METHOD_EXISTING_COVER,
     SERVICE_SET_KNOWN_POSITION,
     SERVICE_SET_KNOWN_TILT_POSITION,
-    SERVICE_OPEN_SLACKS,
-    SERVICE_CLOSE_SLACKS,
-    DEFAULT_TILT_TIME,
+    MANUFACTURER,
+    MODEL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -458,17 +460,8 @@ async def async_setup_entry(
     
     # Create cover entity from config entry
     cover = CoverTimeBased(
-        device_id=config_entry.entry_id,
-        name=config[CONF_NAME],
-        opening_time_map=config[CONF_OPENING_TIME_MAP],
-        closing_time_map=config[CONF_CLOSING_TIME_MAP],
-        tilt_time_down=config.get(CONF_TILTING_TIME_DOWN),
-        tilt_time_up=config.get(CONF_TILTING_TIME_UP),
-        open_switch_entity_id=config.get(CONF_OPEN_SWITCH_ENTITY_ID),
-        close_switch_entity_id=config.get(CONF_CLOSE_SWITCH_ENTITY_ID),
-        stop_switch_entity_id=config.get(CONF_STOP_SWITCH_ENTITY_ID),
-        is_button=config.get(CONF_IS_BUTTON, False),
-        cover_entity_id=config.get(CONF_COVER_ENTITY_ID),
+        config_entry=config_entry,
+        hass=hass,
     )
     
     async_add_entities([cover])
@@ -481,12 +474,6 @@ async def async_setup_entry(
         )
         platform.async_register_entity_service(
             SERVICE_SET_KNOWN_TILT_POSITION, TILT_POSITION_SCHEMA, "set_known_tilt_position"
-        )
-        platform.async_register_entity_service(
-            SERVICE_OPEN_SLACKS, {}, "async_open_slacks"
-        )
-        platform.async_register_entity_service(
-            SERVICE_CLOSE_SLACKS, {}, "async_close_slacks"
         )
 
 
@@ -513,41 +500,45 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
 class CoverTimeBased(CoverEntity, RestoreEntity):
     """Cover entity with time-based position maps."""
     
-    def __init__(
-        self,
-        device_id,
-        name,
-        opening_time_map,
-        closing_time_map,
-        tilt_time_down,
-        tilt_time_up,
-        open_switch_entity_id,
-        close_switch_entity_id,
-        stop_switch_entity_id,
-        is_button,
-        cover_entity_id,
-    ):
+    def __init__(self, config_entry: ConfigEntry, hass: HomeAssistant):
         """Initialize the cover."""
-        # Use name-based unique_id for stability across HA updates
-        self._unique_id = re.sub(r'[^a-z0-9_]', '_', name.lower())
-        self._device_id = device_id
-        self._name = name or device_id
+        self.hass = hass
+        self.config_entry = config_entry
+        config = config_entry.data
+        
+        # Basic configuration
+        self._name = config[CONF_NAME]
+        self._unique_id = re.sub(r'[^a-z0-9_]', '_', self._name.lower())
+        self._device_id = config_entry.entry_id
+        
+        # Control method
+        self._control_method = config.get(CONF_CONTROL_METHOD, CONTROL_METHOD_SWITCHES)
         
         # Initialize position calculator
-        self.position_calc = PositionCalculator(opening_time_map, closing_time_map)
+        self.position_calc = PositionCalculator(
+            config[CONF_OPENING_TIME_MAP], 
+            config[CONF_CLOSING_TIME_MAP]
+        )
         
         # Initialize tilt calculator if supported
-        self._tilt_time_down = tilt_time_down
-        self._tilt_time_up = tilt_time_up
+        self._tilt_time_down = config.get(CONF_TILTING_TIME_DOWN)
+        self._tilt_time_up = config.get(CONF_TILTING_TIME_UP)
         if self._has_tilt_support():
-            self.tilt_calc = TiltCalculator(tilt_time_down, tilt_time_up)
+            self.tilt_calc = TiltCalculator(self._tilt_time_down, self._tilt_time_up)
         
-        # Switch/entity configuration
-        self._open_switch_entity_id = open_switch_entity_id
-        self._close_switch_entity_id = close_switch_entity_id
-        self._stop_switch_entity_id = stop_switch_entity_id
-        self._is_button = is_button
-        self._cover_entity_id = cover_entity_id
+        # Control entities configuration
+        if self._control_method == CONTROL_METHOD_SWITCHES:
+            self._open_switch_entity_id = config.get(CONF_OPEN_SWITCH_ENTITY_ID)
+            self._close_switch_entity_id = config.get(CONF_CLOSE_SWITCH_ENTITY_ID)
+            self._stop_switch_entity_id = config.get(CONF_STOP_SWITCH_ENTITY_ID)
+            self._is_button = config.get(CONF_IS_BUTTON, False)
+            self._cover_entity_id = None
+        else:
+            self._cover_entity_id = config.get(CONF_COVER_ENTITY_ID)
+            self._open_switch_entity_id = None
+            self._close_switch_entity_id = None
+            self._stop_switch_entity_id = None
+            self._is_button = False
         
         self._unsubscribe_auto_updater = None
     
@@ -581,9 +572,10 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         return DeviceInfo(
             identifiers={(DOMAIN, self._device_id)},
             name=self._name,
-            manufacturer="Cover Time Based",
-            model="Time-based Cover Controller",
-            sw_version="4.0.0",
+            manufacturer=MANUFACTURER,
+            model=MODEL,
+            sw_version=self.config_entry.version,
+            configuration_url=f"homeassistant://config/integrations/integration/{DOMAIN}",
         )
     
     @property

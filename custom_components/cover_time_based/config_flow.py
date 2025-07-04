@@ -10,7 +10,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
@@ -19,6 +19,8 @@ from .const import (
     DOMAIN,
     CONF_OPENING_TIME_MAP,
     CONF_CLOSING_TIME_MAP,
+    CONF_OPENING_TIME,
+    CONF_CLOSING_TIME,
     CONF_TILTING_TIME_DOWN,
     CONF_TILTING_TIME_UP,
     CONF_OPEN_SWITCH_ENTITY_ID,
@@ -26,447 +28,987 @@ from .const import (
     CONF_STOP_SWITCH_ENTITY_ID,
     CONF_IS_BUTTON,
     CONF_COVER_ENTITY_ID,
-    CONF_USE_EXISTING_COVER,
-    DEFAULT_TILT_TIME,
+    CONF_CONTROL_METHOD,
+    CONTROL_METHOD_SWITCHES,
+    CONTROL_METHOD_EXISTING_COVER,
+    DEFAULT_OPENING_TIME_MAP,
+    DEFAULT_CLOSING_TIME_MAP,
+    CURRENT_CONFIG_VERSION,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
+class TimeMapValidator:
+    """Validator for time maps with comprehensive error messages."""
+    
+    @staticmethod
+    def validate_json_format(time_map_str: str) -> dict[str, Any]:
+        """Validate JSON format and return parsed data."""
+        if not time_map_str or not time_map_str.strip():
+            raise vol.Invalid("Time map cannot be empty")
+        
+        try:
+            data = json.loads(time_map_str)
+        except json.JSONDecodeError as err:
+            raise vol.Invalid(f"Invalid JSON format: {err}") from err
+        
+        if not isinstance(data, dict):
+            raise vol.Invalid("Time map must be a JSON object (dictionary)")
+        
+        if not data:
+            raise vol.Invalid("Time map cannot be empty")
+        
+        return data
+    
+    @staticmethod
+    def validate_time_position_pairs(data: dict[str, Any]) -> dict[float, int]:
+        """Validate and convert time-position pairs."""
+        time_map = {}
+        
+        for time_str, position in data.items():
+            # Validate time
+            try:
+                time_val = float(time_str)
+                if time_val < 0:
+                    raise vol.Invalid(f"Time '{time_str}' must be non-negative")
+            except (ValueError, TypeError) as err:
+                raise vol.Invalid(f"Invalid time value '{time_str}': must be a number") from err
+            
+            # Validate position
+            try:
+                pos_val = int(position)
+                if not 0 <= pos_val <= 100:
+                    raise vol.Invalid(f"Position {pos_val} at time {time_val} must be between 0 and 100")
+            except (ValueError, TypeError) as err:
+                raise vol.Invalid(f"Invalid position value '{position}' at time {time_val}: must be an integer") from err
+            
+            time_map[time_val] = pos_val
+        
+        return time_map
+    
+    @staticmethod
+    def validate_time_sequence(time_map: dict[float, int], map_type: str) -> None:
+        """Validate time sequence and position progression."""
+        if not time_map:
+            raise vol.Invalid(f"{map_type} time map cannot be empty")
+        
+        # Sort by time
+        sorted_times = sorted(time_map.keys())
+        positions = [time_map[t] for t in sorted_times]
+        
+        # Must start at time 0
+        if sorted_times[0] != 0:
+            raise vol.Invalid(f"{map_type} time map must start at time 0 (found {sorted_times[0]})")
+        
+        # Validate start/end positions based on map type
+        if map_type.lower() == "opening":
+            if positions[0] != 0:
+                raise vol.Invalid(f"Opening time map must start at position 0 (closed), found {positions[0]}")
+            if positions[-1] != 100:
+                raise vol.Invalid(f"Opening time map must end at position 100 (open), found {positions[-1]}")
+            
+            # Validate monotonic increasing
+            for i in range(1, len(positions)):
+                if positions[i] < positions[i-1]:
+                    raise vol.Invalid(
+                        f"Opening time map positions must be non-decreasing. "
+                        f"Position {positions[i]} at time {sorted_times[i]} is less than "
+                        f"position {positions[i-1]} at time {sorted_times[i-1]}"
+                    )
+        
+        elif map_type.lower() == "closing":
+            if positions[0] != 100:
+                raise vol.Invalid(f"Closing time map must start at position 100 (open), found {positions[0]}")
+            if positions[-1] != 0:
+                raise vol.Invalid(f"Closing time map must end at position 0 (closed), found {positions[-1]}")
+            
+            # Validate monotonic decreasing
+            for i in range(1, len(positions)):
+                if positions[i] > positions[i-1]:
+                    raise vol.Invalid(
+                        f"Closing time map positions must be non-increasing. "
+                        f"Position {positions[i]} at time {sorted_times[i]} is greater than "
+                        f"position {positions[i-1]} at time {sorted_times[i-1]}"
+                    )
+    
+    @classmethod
+    def validate_time_map(cls, time_map_str: str, map_type: str) -> dict[float, int]:
+        """Complete validation of time map."""
+        # Step 1: Validate JSON format
+        data = cls.validate_json_format(time_map_str)
+        
+        # Step 2: Validate time-position pairs
+        time_map = cls.validate_time_position_pairs(data)
+        
+        # Step 3: Validate sequence and progression
+        cls.validate_time_sequence(time_map, map_type)
+        
+        return time_map
+
+
 def validate_tilt_time(value: Any) -> float | None:
-    """Validate tilt time value, allowing None/empty values."""
+    """Validate tilt time value."""
     if value is None or value == "" or value == 0:
         return None
+    
     try:
         float_val = float(value)
-        if float_val < 0.1 or float_val > 300:
-            raise vol.Invalid("Tilt time must be between 0.1 and 300 seconds")
+        if float_val <= 0:
+            raise vol.Invalid("Tilt time must be positive")
+        if float_val > 300:
+            raise vol.Invalid("Tilt time cannot exceed 300 seconds")
         return float_val
     except (ValueError, TypeError) as err:
-        raise vol.Invalid(f"Invalid tilt time value: {err}") from err
+        raise vol.Invalid(f"Invalid tilt time: {err}") from err
 
 
-def create_time_map_from_simple_config(total_time: float, positions: list[int]) -> dict[float, int]:
-    """Create a time map from simple configuration."""
-    if not positions or len(positions) < 2:
-        raise vol.Invalid("At least 2 positions are required")
-    
-    time_map = {}
-    time_step = total_time / (len(positions) - 1)
-    
-    for i, position in enumerate(positions):
-        if not 0 <= position <= 100:
-            raise vol.Invalid(f"Position {position} must be between 0 and 100")
-        time_map[i * time_step] = position
-    
-    return time_map
+def generate_unique_id(name: str) -> str:
+    """Generate a stable unique ID from name."""
+    return re.sub(r'[^a-z0-9_]', '_', name.lower().strip())
 
 
-def parse_time_map_input(time_map_str: str, simple_mode: bool, total_time: float, positions_str: str, map_type: str) -> dict[float, int]:
-    """Parse time map from either JSON or simple mode."""
-    if simple_mode:
-        # Parse positions from comma-separated string
-        try:
-            positions = [int(p.strip()) for p in positions_str.split(",") if p.strip()]
-            return create_time_map_from_simple_config(total_time, positions)
-        except ValueError as err:
-            raise vol.Invalid(f"Invalid positions format: {err}") from err
-    else:
-        # Use existing JSON validation
-        return validate_time_map(time_map_str, map_type)
-
-
-def validate_time_map(time_map_str: str, map_type: str) -> dict[float, int]:
-    """Validate and parse time map from string."""
-    try:
-        time_map_raw = json.loads(time_map_str)
-    except json.JSONDecodeError as err:
-        raise vol.Invalid(f"Invalid JSON format: {err}") from err
-    
-    if not isinstance(time_map_raw, dict):
-        raise vol.Invalid("Time map must be a JSON object")
-    
-    # Convert keys to float and values to int
-    try:
-        time_map = {float(k): int(v) for k, v in time_map_raw.items()}
-    except (ValueError, TypeError) as err:
-        raise vol.Invalid(f"Invalid time map format: {err}") from err
-    
-    # Validate time map
+def format_time_map_for_ui(time_map: dict[float, int] | dict[str, int] | dict) -> str:
+    """Format time map for UI display with proper JSON formatting."""
     if not time_map:
-        raise vol.Invalid(f"{map_type} time map cannot be empty")
+        return "{}"
     
-    # Sort by time
-    sorted_times = sorted(time_map.keys())
-    times = sorted_times
-    positions = [time_map[t] for t in times]
+    # Handle both float and string keys
+    string_map = {}
+    for key, value in time_map.items():
+        # Convert key to string if it's not already
+        str_key = str(key) if not isinstance(key, str) else key
+        string_map[str_key] = value
     
-    # Validate time progression
-    if times[0] != 0:
-        raise vol.Invalid(f"{map_type} time map must start at time 0")
-    
-    # Validate position range
-    for pos in positions:
-        if not 0 <= pos <= 100:
-            raise vol.Invalid(f"Position {pos} in {map_type} time map must be between 0 and 100")
-    
-    # Validate start/end positions
-    if map_type == "Opening":
-        if positions[0] != 0:
-            raise vol.Invalid("Opening time map must start at position 0 (closed)")
-        if positions[-1] != 100:
-            raise vol.Invalid("Opening time map must end at position 100 (open)")
-    else:  # closing
-        if positions[0] != 100:
-            raise vol.Invalid("Closing time map must start at position 100 (open)")
-        if positions[-1] != 0:
-            raise vol.Invalid("Closing time map must end at position 0 (closed)")
-    
-    # Validate monotonic progression
-    if map_type == "Opening":
-        for i in range(1, len(positions)):
-            if positions[i] < positions[i-1]:
-                raise vol.Invalid("Opening time map positions must be non-decreasing")
-    else:  # closing
-        for i in range(1, len(positions)):
-            if positions[i] > positions[i-1]:
-                raise vol.Invalid("Closing time map positions must be non-increasing")
-    
-    return time_map
+    return json.dumps(string_map, sort_keys=True)
 
 
-# This function is no longer needed as validation is done directly in the flow methods
+def create_linear_time_map(total_time: float, start_position: int, end_position: int) -> dict[float, int]:
+    """Create a linear time map from start to end position over total time."""
+    return {0.0: start_position, total_time: end_position}
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Cover Time Based."""
 
-    VERSION = 2
+    VERSION = CURRENT_CONFIG_VERSION
+
+    def __init__(self) -> None:
+        """Initialize config flow."""
+        self._control_method: str | None = None
+        self._name: str | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle the initial step."""
+        """Handle the initial step - choose control method."""
+        if user_input is not None:
+            self._control_method = user_input[CONF_CONTROL_METHOD]
+            
+            if self._control_method == CONTROL_METHOD_SWITCHES:
+                return await self.async_step_switches()
+            else:
+                return await self.async_step_existing_cover()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({
+                vol.Required(CONF_CONTROL_METHOD): vol.In({
+                    CONTROL_METHOD_SWITCHES: "Individual switch entities (open/close/stop)",
+                    CONTROL_METHOD_EXISTING_COVER: "Existing cover entity"
+                })
+            }),
+        )
+
+    async def async_step_switches(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure cover using individual switch entities - choose configuration mode."""
+        if user_input is not None:
+            config_mode = user_input["config_mode"]
+            
+            if config_mode == "standard":
+                return await self.async_step_switches_standard()
+            elif config_mode == "advanced":
+                return await self.async_step_switches_advanced()
+            else:  # automatic
+                return await self.async_step_switches_automatic()
+
+        return self.async_show_form(
+            step_id="switches",
+            data_schema=vol.Schema({
+                vol.Required("config_mode"): vol.In({
+                    "standard": "Standard - Simple time and position setup",
+                    "advanced": "Advanced - Full JSON time maps",
+                    "automatic": "Automatic - Quick setup with detection"
+                })
+            }),
+        )
+
+    async def async_step_switches_standard(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure cover using standard mode."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
             try:
-                # Determine if using existing cover or individual switches
-                use_existing_cover = user_input.get(CONF_USE_EXISTING_COVER, False)
+                # Validate required entities
+                open_entity = user_input[CONF_OPEN_SWITCH_ENTITY_ID]
+                close_entity = user_input[CONF_CLOSE_SWITCH_ENTITY_ID]
+                stop_entity = user_input.get(CONF_STOP_SWITCH_ENTITY_ID)
                 
-                if use_existing_cover:
-                    # Validate cover entity exists
-                    cover_entity = user_input.get(CONF_COVER_ENTITY_ID)
-                    if not cover_entity:
-                        raise vol.Invalid("Cover entity is required when using existing cover")
-                    
-                    if self.hass.states.get(cover_entity) is None:
-                        raise vol.Invalid(f"Cover entity '{cover_entity}' not found")
-                    
-                    # Set switch entities to None when using existing cover
-                    open_entity = None
-                    close_entity = None
-                    stop_entity = None
-                else:
-                    # Validate switch entities exist
-                    open_entity = user_input.get(CONF_OPEN_SWITCH_ENTITY_ID)
-                    close_entity = user_input.get(CONF_CLOSE_SWITCH_ENTITY_ID)
-                    stop_entity = user_input.get(CONF_STOP_SWITCH_ENTITY_ID)
-                    cover_entity = None
-                    
-                    if not open_entity:
-                        raise vol.Invalid("Open switch entity is required when not using existing cover")
-                    if not close_entity:
-                        raise vol.Invalid("Close switch entity is required when not using existing cover")
-                    
-                    if self.hass.states.get(open_entity) is None:
-                        raise vol.Invalid(f"Open switch entity '{open_entity}' not found")
-                    
-                    if self.hass.states.get(close_entity) is None:
-                        raise vol.Invalid(f"Close switch entity '{close_entity}' not found")
-                    
-                    if stop_entity and self.hass.states.get(stop_entity) is None:
-                        raise vol.Invalid(f"Stop switch entity '{stop_entity}' not found")
+                # Check entities exist
+                if self.hass.states.get(open_entity) is None:
+                    raise vol.Invalid(f"Open entity '{open_entity}' not found")
+                if self.hass.states.get(close_entity) is None:
+                    raise vol.Invalid(f"Close entity '{close_entity}' not found")
+                if stop_entity and self.hass.states.get(stop_entity) is None:
+                    raise vol.Invalid(f"Stop entity '{stop_entity}' not found")
                 
-                # Determine configuration mode and validate time maps
-                simple_mode = user_input.get("use_simple_mode", False)
+                # Create simple time maps from user input
+                opening_time = float(user_input[CONF_OPENING_TIME])
+                closing_time = float(user_input[CONF_CLOSING_TIME])
                 
-                if simple_mode:
-                    # Validate simple mode inputs
-                    opening_time_map = parse_time_map_input(
-                        "", True,
-                        user_input.get("opening_total_time", 10.0),
-                        user_input.get("opening_positions", "0,100"),
-                        "Opening"
-                    )
-                    closing_time_map = parse_time_map_input(
-                        "", True,
-                        user_input.get("closing_total_time", 10.0),
-                        user_input.get("closing_positions", "100,0"),
-                        "Closing"
-                    )
-                else:
-                    # Validate JSON inputs
-                    opening_time_map = validate_time_map(user_input[CONF_OPENING_TIME_MAP], "Opening")
-                    closing_time_map = validate_time_map(user_input[CONF_CLOSING_TIME_MAP], "Closing")
+                opening_map = create_linear_time_map(opening_time, 0, 100)
+                closing_map = create_linear_time_map(closing_time, 100, 0)
                 
-                # Validate tilt times (properly handle None/empty values)
+                # Validate tilt times
                 tilt_down = validate_tilt_time(user_input.get(CONF_TILTING_TIME_DOWN))
                 tilt_up = validate_tilt_time(user_input.get(CONF_TILTING_TIME_UP))
                 
-                # Prepare validated data
-                info = {
-                    CONF_NAME: user_input[CONF_NAME],
-                    CONF_OPENING_TIME_MAP: opening_time_map,
-                    CONF_CLOSING_TIME_MAP: closing_time_map,
+                # Check for existing entry with same name
+                name = user_input[CONF_NAME]
+                unique_id = generate_unique_id(name)
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured()
+                
+                # Create entry
+                data = {
+                    CONF_NAME: name,
+                    CONF_CONTROL_METHOD: CONTROL_METHOD_SWITCHES,
                     CONF_OPEN_SWITCH_ENTITY_ID: open_entity,
                     CONF_CLOSE_SWITCH_ENTITY_ID: close_entity,
                     CONF_STOP_SWITCH_ENTITY_ID: stop_entity,
-                    CONF_COVER_ENTITY_ID: cover_entity,
                     CONF_IS_BUTTON: user_input.get(CONF_IS_BUTTON, False),
+                    CONF_OPENING_TIME_MAP: opening_map,
+                    CONF_CLOSING_TIME_MAP: closing_map,
                     CONF_TILTING_TIME_DOWN: tilt_down,
                     CONF_TILTING_TIME_UP: tilt_up,
                 }
                 
+                return self.async_create_entry(title=name, data=data)
+                
             except vol.Invalid as err:
                 errors["base"] = str(err)
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception")
-                errors["base"] = "unknown"
-            else:
-                # Create unique ID based on name (stable across HA updates)
-                unique_id = re.sub(r'[^a-z0-9_]', '_', user_input[CONF_NAME].lower())
+            except Exception as err:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected error in standard switches config")
+                errors["base"] = f"unexpected_error: {err}"
+
+        return self.async_show_form(
+            step_id="switches_standard",
+            data_schema=vol.Schema({
+                vol.Required(CONF_NAME): str,
+                vol.Required(CONF_OPEN_SWITCH_ENTITY_ID): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "script", "automation", "input_boolean", "button"]
+                    )
+                ),
+                vol.Required(CONF_CLOSE_SWITCH_ENTITY_ID): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "script", "automation", "input_boolean", "button"]
+                    )
+                ),
+                vol.Optional(CONF_STOP_SWITCH_ENTITY_ID): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "script", "automation", "input_boolean", "button"]
+                    )
+                ),
+                vol.Optional(CONF_IS_BUTTON, default=False): bool,
+                vol.Required(CONF_OPENING_TIME, default=10.0): vol.All(
+                    vol.Coerce(float), vol.Range(min=0.1, max=300)
+                ),
+                vol.Required(CONF_CLOSING_TIME, default=10.0): vol.All(
+                    vol.Coerce(float), vol.Range(min=0.1, max=300)
+                ),
+                vol.Optional(CONF_TILTING_TIME_DOWN): str,
+                vol.Optional(CONF_TILTING_TIME_UP): str,
+            }),
+            errors=errors,
+        )
+
+    async def async_step_switches_advanced(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure cover using advanced mode."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                # Validate required entities
+                open_entity = user_input[CONF_OPEN_SWITCH_ENTITY_ID]
+                close_entity = user_input[CONF_CLOSE_SWITCH_ENTITY_ID]
+                stop_entity = user_input.get(CONF_STOP_SWITCH_ENTITY_ID)
+                
+                # Check entities exist
+                if self.hass.states.get(open_entity) is None:
+                    raise vol.Invalid(f"Open entity '{open_entity}' not found")
+                if self.hass.states.get(close_entity) is None:
+                    raise vol.Invalid(f"Close entity '{close_entity}' not found")
+                if stop_entity and self.hass.states.get(stop_entity) is None:
+                    raise vol.Invalid(f"Stop entity '{stop_entity}' not found")
+                
+                # Validate time maps
+                opening_map = TimeMapValidator.validate_time_map(
+                    user_input[CONF_OPENING_TIME_MAP], "Opening"
+                )
+                closing_map = TimeMapValidator.validate_time_map(
+                    user_input[CONF_CLOSING_TIME_MAP], "Closing"
+                )
+                
+                # Validate tilt times
+                tilt_down = validate_tilt_time(user_input.get(CONF_TILTING_TIME_DOWN))
+                tilt_up = validate_tilt_time(user_input.get(CONF_TILTING_TIME_UP))
+                
+                # Check for existing entry with same name
+                name = user_input[CONF_NAME]
+                unique_id = generate_unique_id(name)
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
                 
-                return self.async_create_entry(title=info[CONF_NAME], data=info)
-
-        data_schema = vol.Schema({
-            vol.Required(CONF_NAME): str,
-            vol.Optional(CONF_USE_EXISTING_COVER, default=False): bool,
-            # Cover entity option
-            vol.Optional(CONF_COVER_ENTITY_ID): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["cover"])
-            ),
-            # Switch entity options
-            vol.Optional(CONF_OPEN_SWITCH_ENTITY_ID): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(CONF_CLOSE_SWITCH_ENTITY_ID): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(CONF_STOP_SWITCH_ENTITY_ID): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(CONF_IS_BUTTON, default=False): bool,
-            vol.Optional("use_simple_mode", default=False): bool,
-            # Simple mode fields
-            vol.Optional("opening_total_time", default=10.0): vol.All(
-                vol.Coerce(float), vol.Range(min=0.1, max=3600)
-            ),
-            vol.Optional("opening_positions", default="0,100"): str,
-            vol.Optional("closing_total_time", default=10.0): vol.All(
-                vol.Coerce(float), vol.Range(min=0.1, max=3600)
-            ),
-            vol.Optional("closing_positions", default="100,0"): str,
-            # JSON mode fields
-            vol.Optional(
-                CONF_OPENING_TIME_MAP, 
-                default='{"0": 0, "10": 100}'
-            ): str,
-            vol.Optional(
-                CONF_CLOSING_TIME_MAP, 
-                default='{"0": 100, "10": 0}'
-            ): str,
-            # Tilt fields (optional, using string to allow empty values)
-            vol.Optional(CONF_TILTING_TIME_DOWN): str,
-            vol.Optional(CONF_TILTING_TIME_UP): str,
-        })
+                # Create entry
+                data = {
+                    CONF_NAME: name,
+                    CONF_CONTROL_METHOD: CONTROL_METHOD_SWITCHES,
+                    CONF_OPEN_SWITCH_ENTITY_ID: open_entity,
+                    CONF_CLOSE_SWITCH_ENTITY_ID: close_entity,
+                    CONF_STOP_SWITCH_ENTITY_ID: stop_entity,
+                    CONF_IS_BUTTON: user_input.get(CONF_IS_BUTTON, False),
+                    CONF_OPENING_TIME_MAP: opening_map,
+                    CONF_CLOSING_TIME_MAP: closing_map,
+                    CONF_TILTING_TIME_DOWN: tilt_down,
+                    CONF_TILTING_TIME_UP: tilt_up,
+                }
+                
+                return self.async_create_entry(title=name, data=data)
+                
+            except vol.Invalid as err:
+                errors["base"] = str(err)
+            except Exception as err:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected error in advanced switches config")
+                errors["base"] = f"unexpected_error: {err}"
 
         return self.async_show_form(
-            step_id="user",
-            data_schema=data_schema,
+            step_id="switches_advanced",
+            data_schema=vol.Schema({
+                vol.Required(CONF_NAME): str,
+                vol.Required(CONF_OPEN_SWITCH_ENTITY_ID): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "script", "automation", "input_boolean", "button"]
+                    )
+                ),
+                vol.Required(CONF_CLOSE_SWITCH_ENTITY_ID): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "script", "automation", "input_boolean", "button"]
+                    )
+                ),
+                vol.Optional(CONF_STOP_SWITCH_ENTITY_ID): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "script", "automation", "input_boolean", "button"]
+                    )
+                ),
+                vol.Optional(CONF_IS_BUTTON, default=False): bool,
+                vol.Required(
+                    CONF_OPENING_TIME_MAP,
+                    default=format_time_map_for_ui(DEFAULT_OPENING_TIME_MAP)
+                ): str,
+                vol.Required(
+                    CONF_CLOSING_TIME_MAP,
+                    default=format_time_map_for_ui(DEFAULT_CLOSING_TIME_MAP)
+                ): str,
+                vol.Optional(CONF_TILTING_TIME_DOWN): str,
+                vol.Optional(CONF_TILTING_TIME_UP): str,
+            }),
             errors=errors,
-            description_placeholders={
-                "opening_example": '{"0": 0, "5": 50, "10": 100}',
-                "closing_example": '{"0": 100, "8": 20, "10": 0}',
-            },
+        )
+
+    async def async_step_switches_automatic(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure cover using automatic mode."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                # Validate required entities
+                open_entity = user_input[CONF_OPEN_SWITCH_ENTITY_ID]
+                close_entity = user_input[CONF_CLOSE_SWITCH_ENTITY_ID]
+                stop_entity = user_input.get(CONF_STOP_SWITCH_ENTITY_ID)
+                
+                # Check entities exist
+                if self.hass.states.get(open_entity) is None:
+                    raise vol.Invalid(f"Open entity '{open_entity}' not found")
+                if self.hass.states.get(close_entity) is None:
+                    raise vol.Invalid(f"Close entity '{close_entity}' not found")
+                if stop_entity and self.hass.states.get(stop_entity) is None:
+                    raise vol.Invalid(f"Stop entity '{stop_entity}' not found")
+                
+                # Auto-detect entity types and set defaults
+                open_state = self.hass.states.get(open_entity)
+                is_button = self._detect_button_entity(open_state)
+                
+                # Use default time maps for automatic setup
+                opening_map = DEFAULT_OPENING_TIME_MAP.copy()
+                closing_map = DEFAULT_CLOSING_TIME_MAP.copy()
+                
+                # Check for existing entry with same name
+                name = user_input[CONF_NAME]
+                unique_id = generate_unique_id(name)
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured()
+                
+                # Create entry
+                data = {
+                    CONF_NAME: name,
+                    CONF_CONTROL_METHOD: CONTROL_METHOD_SWITCHES,
+                    CONF_OPEN_SWITCH_ENTITY_ID: open_entity,
+                    CONF_CLOSE_SWITCH_ENTITY_ID: close_entity,
+                    CONF_STOP_SWITCH_ENTITY_ID: stop_entity,
+                    CONF_IS_BUTTON: is_button,
+                    CONF_OPENING_TIME_MAP: opening_map,
+                    CONF_CLOSING_TIME_MAP: closing_map,
+                    CONF_TILTING_TIME_DOWN: None,
+                    CONF_TILTING_TIME_UP: None,
+                }
+                
+                return self.async_create_entry(title=name, data=data)
+                
+            except vol.Invalid as err:
+                errors["base"] = str(err)
+            except Exception as err:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected error in automatic switches config")
+                errors["base"] = f"unexpected_error: {err}"
+
+        return self.async_show_form(
+            step_id="switches_automatic",
+            data_schema=vol.Schema({
+                vol.Required(CONF_NAME): str,
+                vol.Required(CONF_OPEN_SWITCH_ENTITY_ID): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "script", "automation", "input_boolean", "button"]
+                    )
+                ),
+                vol.Required(CONF_CLOSE_SWITCH_ENTITY_ID): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "script", "automation", "input_boolean", "button"]
+                    )
+                ),
+                vol.Optional(CONF_STOP_SWITCH_ENTITY_ID): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "script", "automation", "input_boolean", "button"]
+                    )
+                ),
+            }),
+            errors=errors,
+        )
+
+    def _detect_button_entity(self, entity_state) -> bool:
+        """Detect if entity is a button type."""
+        if not entity_state:
+            return False
+        
+        entity_id = entity_state.entity_id
+        domain = entity_id.split(".")[0]
+        
+        # Button domain entities are always momentary
+        if domain == "button":
+            return True
+        
+        # Check for common button patterns in entity names
+        button_patterns = ["button", "press", "push", "momentary"]
+        entity_name = entity_state.attributes.get("friendly_name", entity_id).lower()
+        
+        return any(pattern in entity_name for pattern in button_patterns)
+
+    async def async_step_existing_cover(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure cover using existing cover entity - choose configuration mode."""
+        if user_input is not None:
+            config_mode = user_input["config_mode"]
+            
+            if config_mode == "standard":
+                return await self.async_step_existing_cover_standard()
+            elif config_mode == "advanced":
+                return await self.async_step_existing_cover_advanced()
+            else:  # automatic
+                return await self.async_step_existing_cover_automatic()
+
+        return self.async_show_form(
+            step_id="existing_cover",
+            data_schema=vol.Schema({
+                vol.Required("config_mode"): vol.In({
+                    "standard": "Standard - Simple time and position setup",
+                    "advanced": "Advanced - Full JSON time maps",
+                    "automatic": "Automatic - Quick setup with defaults"
+                })
+            }),
+        )
+
+    async def async_step_existing_cover_standard(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure existing cover using standard mode."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                # Validate cover entity
+                cover_entity = user_input[CONF_COVER_ENTITY_ID]
+                if self.hass.states.get(cover_entity) is None:
+                    raise vol.Invalid(f"Cover entity '{cover_entity}' not found")
+                
+                # Create simple time maps from user input
+                opening_time = float(user_input[CONF_OPENING_TIME])
+                closing_time = float(user_input[CONF_CLOSING_TIME])
+                
+                opening_map = create_linear_time_map(opening_time, 0, 100)
+                closing_map = create_linear_time_map(closing_time, 100, 0)
+                
+                # Validate tilt times
+                tilt_down = validate_tilt_time(user_input.get(CONF_TILTING_TIME_DOWN))
+                tilt_up = validate_tilt_time(user_input.get(CONF_TILTING_TIME_UP))
+                
+                # Check for existing entry with same name
+                name = user_input[CONF_NAME]
+                unique_id = generate_unique_id(name)
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured()
+                
+                # Create entry
+                data = {
+                    CONF_NAME: name,
+                    CONF_CONTROL_METHOD: CONTROL_METHOD_EXISTING_COVER,
+                    CONF_COVER_ENTITY_ID: cover_entity,
+                    CONF_OPENING_TIME_MAP: opening_map,
+                    CONF_CLOSING_TIME_MAP: closing_map,
+                    CONF_TILTING_TIME_DOWN: tilt_down,
+                    CONF_TILTING_TIME_UP: tilt_up,
+                }
+                
+                return self.async_create_entry(title=name, data=data)
+                
+            except vol.Invalid as err:
+                errors["base"] = str(err)
+            except Exception as err:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected error in standard existing cover config")
+                errors["base"] = f"unexpected_error: {err}"
+
+        return self.async_show_form(
+            step_id="existing_cover_standard",
+            data_schema=vol.Schema({
+                vol.Required(CONF_NAME): str,
+                vol.Required(CONF_COVER_ENTITY_ID): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["cover"])
+                ),
+                vol.Required(CONF_OPENING_TIME, default=10.0): vol.All(
+                    vol.Coerce(float), vol.Range(min=0.1, max=300)
+                ),
+                vol.Required(CONF_CLOSING_TIME, default=10.0): vol.All(
+                    vol.Coerce(float), vol.Range(min=0.1, max=300)
+                ),
+                vol.Optional(CONF_TILTING_TIME_DOWN): str,
+                vol.Optional(CONF_TILTING_TIME_UP): str,
+            }),
+            errors=errors,
+        )
+
+    async def async_step_existing_cover_advanced(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure existing cover using advanced mode."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                # Validate cover entity
+                cover_entity = user_input[CONF_COVER_ENTITY_ID]
+                if self.hass.states.get(cover_entity) is None:
+                    raise vol.Invalid(f"Cover entity '{cover_entity}' not found")
+                
+                # Validate time maps
+                opening_map = TimeMapValidator.validate_time_map(
+                    user_input[CONF_OPENING_TIME_MAP], "Opening"
+                )
+                closing_map = TimeMapValidator.validate_time_map(
+                    user_input[CONF_CLOSING_TIME_MAP], "Closing"
+                )
+                
+                # Validate tilt times
+                tilt_down = validate_tilt_time(user_input.get(CONF_TILTING_TIME_DOWN))
+                tilt_up = validate_tilt_time(user_input.get(CONF_TILTING_TIME_UP))
+                
+                # Check for existing entry with same name
+                name = user_input[CONF_NAME]
+                unique_id = generate_unique_id(name)
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured()
+                
+                # Create entry
+                data = {
+                    CONF_NAME: name,
+                    CONF_CONTROL_METHOD: CONTROL_METHOD_EXISTING_COVER,
+                    CONF_COVER_ENTITY_ID: cover_entity,
+                    CONF_OPENING_TIME_MAP: opening_map,
+                    CONF_CLOSING_TIME_MAP: closing_map,
+                    CONF_TILTING_TIME_DOWN: tilt_down,
+                    CONF_TILTING_TIME_UP: tilt_up,
+                }
+                
+                return self.async_create_entry(title=name, data=data)
+                
+            except vol.Invalid as err:
+                errors["base"] = str(err)
+            except Exception as err:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected error in advanced existing cover config")
+                errors["base"] = f"unexpected_error: {err}"
+
+        return self.async_show_form(
+            step_id="existing_cover_advanced",
+            data_schema=vol.Schema({
+                vol.Required(CONF_NAME): str,
+                vol.Required(CONF_COVER_ENTITY_ID): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["cover"])
+                ),
+                vol.Required(
+                    CONF_OPENING_TIME_MAP,
+                    default=format_time_map_for_ui(DEFAULT_OPENING_TIME_MAP)
+                ): str,
+                vol.Required(
+                    CONF_CLOSING_TIME_MAP,
+                    default=format_time_map_for_ui(DEFAULT_CLOSING_TIME_MAP)
+                ): str,
+                vol.Optional(CONF_TILTING_TIME_DOWN): str,
+                vol.Optional(CONF_TILTING_TIME_UP): str,
+            }),
+            errors=errors,
+        )
+
+    async def async_step_existing_cover_automatic(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure existing cover using automatic mode."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                # Validate cover entity
+                cover_entity = user_input[CONF_COVER_ENTITY_ID]
+                if self.hass.states.get(cover_entity) is None:
+                    raise vol.Invalid(f"Cover entity '{cover_entity}' not found")
+                
+                # Use default time maps for automatic setup
+                opening_map = DEFAULT_OPENING_TIME_MAP.copy()
+                closing_map = DEFAULT_CLOSING_TIME_MAP.copy()
+                
+                # Check for existing entry with same name
+                name = user_input[CONF_NAME]
+                unique_id = generate_unique_id(name)
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured()
+                
+                # Create entry
+                data = {
+                    CONF_NAME: name,
+                    CONF_CONTROL_METHOD: CONTROL_METHOD_EXISTING_COVER,
+                    CONF_COVER_ENTITY_ID: cover_entity,
+                    CONF_OPENING_TIME_MAP: opening_map,
+                    CONF_CLOSING_TIME_MAP: closing_map,
+                    CONF_TILTING_TIME_DOWN: None,
+                    CONF_TILTING_TIME_UP: None,
+                }
+                
+                return self.async_create_entry(title=name, data=data)
+                
+            except vol.Invalid as err:
+                errors["base"] = str(err)
+            except Exception as err:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected error in automatic existing cover config")
+                errors["base"] = f"unexpected_error: {err}"
+
+        return self.async_show_form(
+            step_id="existing_cover_automatic",
+            data_schema=vol.Schema({
+                vol.Required(CONF_NAME): str,
+                vol.Required(CONF_COVER_ENTITY_ID): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["cover"])
+                ),
+            }),
+            errors=errors,
         )
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle reconfiguration of the integration."""
+        """Handle reconfiguration."""
         config_entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
-        errors: dict[str, str] = {}
+        if not config_entry:
+            return self.async_abort(reason="entry_not_found")
         
+        current_data = config_entry.data
+        control_method = current_data.get(CONF_CONTROL_METHOD, CONTROL_METHOD_SWITCHES)
+        
+        if control_method == CONTROL_METHOD_SWITCHES:
+            return await self.async_step_reconfigure_switches(user_input)
+        else:
+            return await self.async_step_reconfigure_existing_cover(user_input)
+
+    async def async_step_reconfigure_switches(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle reconfiguration for switch-based covers."""
+        config_entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        current_data = config_entry.data
+        errors: dict[str, str] = {}
+
         if user_input is not None:
             try:
-                # Determine if using existing cover or individual switches
-                use_existing_cover = user_input.get(CONF_USE_EXISTING_COVER, False)
+                # Validate entities
+                open_entity = user_input[CONF_OPEN_SWITCH_ENTITY_ID]
+                close_entity = user_input[CONF_CLOSE_SWITCH_ENTITY_ID]
+                stop_entity = user_input.get(CONF_STOP_SWITCH_ENTITY_ID)
                 
-                if use_existing_cover:
-                    # Validate cover entity exists
-                    cover_entity = user_input.get(CONF_COVER_ENTITY_ID)
-                    if not cover_entity:
-                        raise vol.Invalid("Cover entity is required when using existing cover")
-                    
-                    if self.hass.states.get(cover_entity) is None:
-                        raise vol.Invalid(f"Cover entity '{cover_entity}' not found")
-                    
-                    # Set switch entities to None when using existing cover
-                    open_entity = None
-                    close_entity = None
-                    stop_entity = None
-                else:
-                    # Validate switch entities exist
-                    open_entity = user_input.get(CONF_OPEN_SWITCH_ENTITY_ID)
-                    close_entity = user_input.get(CONF_CLOSE_SWITCH_ENTITY_ID)
-                    stop_entity = user_input.get(CONF_STOP_SWITCH_ENTITY_ID)
-                    cover_entity = None
-                    
-                    if not open_entity:
-                        raise vol.Invalid("Open switch entity is required when not using existing cover")
-                    if not close_entity:
-                        raise vol.Invalid("Close switch entity is required when not using existing cover")
-                    
-                    if self.hass.states.get(open_entity) is None:
-                        raise vol.Invalid(f"Open switch entity '{open_entity}' not found")
-                    
-                    if self.hass.states.get(close_entity) is None:
-                        raise vol.Invalid(f"Close switch entity '{close_entity}' not found")
-                    
-                    if stop_entity and self.hass.states.get(stop_entity) is None:
-                        raise vol.Invalid(f"Stop switch entity '{stop_entity}' not found")
+                if self.hass.states.get(open_entity) is None:
+                    raise vol.Invalid(f"Open entity '{open_entity}' not found")
+                if self.hass.states.get(close_entity) is None:
+                    raise vol.Invalid(f"Close entity '{close_entity}' not found")
+                if stop_entity and self.hass.states.get(stop_entity) is None:
+                    raise vol.Invalid(f"Stop entity '{stop_entity}' not found")
                 
-                # Determine configuration mode and validate time maps
-                simple_mode = user_input.get("use_simple_mode", False)
+                # Validate time maps
+                opening_map = TimeMapValidator.validate_time_map(
+                    user_input[CONF_OPENING_TIME_MAP], "Opening"
+                )
+                closing_map = TimeMapValidator.validate_time_map(
+                    user_input[CONF_CLOSING_TIME_MAP], "Closing"
+                )
                 
-                if simple_mode:
-                    # Validate simple mode inputs
-                    opening_time_map = parse_time_map_input(
-                        "", True,
-                        user_input.get("opening_total_time", 10.0),
-                        user_input.get("opening_positions", "0,100"),
-                        "Opening"
-                    )
-                    closing_time_map = parse_time_map_input(
-                        "", True,
-                        user_input.get("closing_total_time", 10.0),
-                        user_input.get("closing_positions", "100,0"),
-                        "Closing"
-                    )
-                else:
-                    # Validate JSON inputs
-                    opening_time_map = validate_time_map(user_input[CONF_OPENING_TIME_MAP], "Opening")
-                    closing_time_map = validate_time_map(user_input[CONF_CLOSING_TIME_MAP], "Closing")
-                
-                # Validate tilt times (properly handle None/empty values)
+                # Validate tilt times
                 tilt_down = validate_tilt_time(user_input.get(CONF_TILTING_TIME_DOWN))
                 tilt_up = validate_tilt_time(user_input.get(CONF_TILTING_TIME_UP))
                 
-                # Prepare validated data
-                info = {
+                # Update entry
+                new_data = {
+                    **current_data,
                     CONF_NAME: user_input[CONF_NAME],
-                    CONF_OPENING_TIME_MAP: opening_time_map,
-                    CONF_CLOSING_TIME_MAP: closing_time_map,
                     CONF_OPEN_SWITCH_ENTITY_ID: open_entity,
                     CONF_CLOSE_SWITCH_ENTITY_ID: close_entity,
                     CONF_STOP_SWITCH_ENTITY_ID: stop_entity,
-                    CONF_COVER_ENTITY_ID: cover_entity,
                     CONF_IS_BUTTON: user_input.get(CONF_IS_BUTTON, False),
+                    CONF_OPENING_TIME_MAP: opening_map,
+                    CONF_CLOSING_TIME_MAP: closing_map,
                     CONF_TILTING_TIME_DOWN: tilt_down,
                     CONF_TILTING_TIME_UP: tilt_up,
                 }
                 
+                self.hass.config_entries.async_update_entry(config_entry, data=new_data)
+                return self.async_abort(reason="reconfigure_successful")
+                
             except vol.Invalid as err:
                 errors["base"] = str(err)
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception")
-                errors["base"] = "unknown"
-            else:
-                return self.async_update_reload_and_abort(
-                    config_entry, data=info, reason="reconfigure_successful"
-                )
+            except Exception as err:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected error in reconfigure switches")
+                errors["base"] = f"unexpected_error: {err}"
 
         return self.async_show_form(
-            step_id="reconfigure",
-            data_schema=self._get_reconfigure_schema(config_entry.data),
+            step_id="reconfigure_switches",
+            data_schema=vol.Schema({
+                vol.Required(CONF_NAME, default=current_data.get(CONF_NAME, "")): str,
+                vol.Required(
+                    CONF_OPEN_SWITCH_ENTITY_ID,
+                    default=current_data.get(CONF_OPEN_SWITCH_ENTITY_ID, "")
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "script", "automation", "input_boolean", "button"]
+                    )
+                ),
+                vol.Required(
+                    CONF_CLOSE_SWITCH_ENTITY_ID,
+                    default=current_data.get(CONF_CLOSE_SWITCH_ENTITY_ID, "")
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "script", "automation", "input_boolean", "button"]
+                    )
+                ),
+                vol.Optional(
+                    CONF_STOP_SWITCH_ENTITY_ID,
+                    default=current_data.get(CONF_STOP_SWITCH_ENTITY_ID)
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "script", "automation", "input_boolean", "button"]
+                    )
+                ),
+                vol.Optional(
+                    CONF_IS_BUTTON,
+                    default=current_data.get(CONF_IS_BUTTON, False)
+                ): bool,
+                vol.Required(
+                    CONF_OPENING_TIME_MAP,
+                    default=format_time_map_for_ui(current_data.get(CONF_OPENING_TIME_MAP, DEFAULT_OPENING_TIME_MAP))
+                ): str,
+                vol.Required(
+                    CONF_CLOSING_TIME_MAP,
+                    default=format_time_map_for_ui(current_data.get(CONF_CLOSING_TIME_MAP, DEFAULT_CLOSING_TIME_MAP))
+                ): str,
+                vol.Optional(
+                    CONF_TILTING_TIME_DOWN,
+                    default=str(current_data.get(CONF_TILTING_TIME_DOWN, "")) if current_data.get(CONF_TILTING_TIME_DOWN) else ""
+                ): str,
+                vol.Optional(
+                    CONF_TILTING_TIME_UP,
+                    default=str(current_data.get(CONF_TILTING_TIME_UP, "")) if current_data.get(CONF_TILTING_TIME_UP) else ""
+                ): str,
+            }),
             errors=errors,
-            description_placeholders={
-                "opening_example": '{"0": 0, "5": 50, "10": 100}',
-                "closing_example": '{"0": 100, "8": 20, "10": 0}',
-            },
         )
 
-    def _get_reconfigure_schema(self, data: dict[str, Any]) -> vol.Schema:
-        """Get the reconfigure schema with current values."""
-        # Get current tilt values, handling None properly
-        current_tilt_down = data.get(CONF_TILTING_TIME_DOWN)
-        current_tilt_up = data.get(CONF_TILTING_TIME_UP)
+    async def async_step_reconfigure_existing_cover(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle reconfiguration for existing cover."""
+        config_entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        current_data = config_entry.data
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                # Validate cover entity
+                cover_entity = user_input[CONF_COVER_ENTITY_ID]
+                if self.hass.states.get(cover_entity) is None:
+                    raise vol.Invalid(f"Cover entity '{cover_entity}' not found")
+                
+                # Validate time maps
+                opening_map = TimeMapValidator.validate_time_map(
+                    user_input[CONF_OPENING_TIME_MAP], "Opening"
+                )
+                closing_map = TimeMapValidator.validate_time_map(
+                    user_input[CONF_CLOSING_TIME_MAP], "Closing"
+                )
+                
+                # Validate tilt times
+                tilt_down = validate_tilt_time(user_input.get(CONF_TILTING_TIME_DOWN))
+                tilt_up = validate_tilt_time(user_input.get(CONF_TILTING_TIME_UP))
+                
+                # Update entry
+                new_data = {
+                    **current_data,
+                    CONF_NAME: user_input[CONF_NAME],
+                    CONF_COVER_ENTITY_ID: cover_entity,
+                    CONF_OPENING_TIME_MAP: opening_map,
+                    CONF_CLOSING_TIME_MAP: closing_map,
+                    CONF_TILTING_TIME_DOWN: tilt_down,
+                    CONF_TILTING_TIME_UP: tilt_up,
+                }
+                
+                self.hass.config_entries.async_update_entry(config_entry, data=new_data)
+                return self.async_abort(reason="reconfigure_successful")
+                
+            except vol.Invalid as err:
+                errors["base"] = str(err)
+            except Exception as err:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected error in reconfigure existing cover")
+                errors["base"] = f"unexpected_error: {err}"
+
+        return self.async_show_form(
+            step_id="reconfigure_existing_cover",
+            data_schema=vol.Schema({
+                vol.Required(CONF_NAME, default=current_data.get(CONF_NAME, "")): str,
+                vol.Required(
+                    CONF_COVER_ENTITY_ID,
+                    default=current_data.get(CONF_COVER_ENTITY_ID, "")
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["cover"])
+                ),
+                vol.Required(
+                    CONF_OPENING_TIME_MAP,
+                    default=format_time_map_for_ui(current_data.get(CONF_OPENING_TIME_MAP, DEFAULT_OPENING_TIME_MAP))
+                ): str,
+                vol.Required(
+                    CONF_CLOSING_TIME_MAP,
+                    default=format_time_map_for_ui(current_data.get(CONF_CLOSING_TIME_MAP, DEFAULT_CLOSING_TIME_MAP))
+                ): str,
+                vol.Optional(
+                    CONF_TILTING_TIME_DOWN,
+                    default=str(current_data.get(CONF_TILTING_TIME_DOWN, "")) if current_data.get(CONF_TILTING_TIME_DOWN) else ""
+                ): str,
+                vol.Optional(
+                    CONF_TILTING_TIME_UP,
+                    default=str(current_data.get(CONF_TILTING_TIME_UP, "")) if current_data.get(CONF_TILTING_TIME_UP) else ""
+                ): str,
+            }),
+            errors=errors,
+        )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return OptionsFlowHandler(config_entry)
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow for Cover Time Based."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage the options."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                # Validate tilt times
+                tilt_down = validate_tilt_time(user_input.get(CONF_TILTING_TIME_DOWN))
+                tilt_up = validate_tilt_time(user_input.get(CONF_TILTING_TIME_UP))
+                
+                # Update config entry data (not options)
+                new_data = {
+                    **self.config_entry.data,
+                    CONF_TILTING_TIME_DOWN: tilt_down,
+                    CONF_TILTING_TIME_UP: tilt_up,
+                }
+                
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, data=new_data
+                )
+                
+                return self.async_create_entry(title="", data={})
+                
+            except vol.Invalid as err:
+                errors["base"] = str(err)
+            except Exception as err:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected error in options flow")
+                errors["base"] = f"unexpected_error: {err}"
+
+        current_data = self.config_entry.data
         
-        # Determine if currently using existing cover
-        has_cover_entity = data.get(CONF_COVER_ENTITY_ID) is not None
-        
-        return vol.Schema({
-            vol.Required(CONF_NAME, default=data.get(CONF_NAME, "")): str,
-            vol.Optional(CONF_USE_EXISTING_COVER, default=has_cover_entity): bool,
-            # Cover entity option
-            vol.Optional(
-                CONF_COVER_ENTITY_ID,
-                default=data.get(CONF_COVER_ENTITY_ID, "")
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["cover"])
-            ),
-            # Switch entity options
-            vol.Optional(
-                CONF_OPEN_SWITCH_ENTITY_ID, 
-                default=data.get(CONF_OPEN_SWITCH_ENTITY_ID, "")
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(
-                CONF_CLOSE_SWITCH_ENTITY_ID, 
-                default=data.get(CONF_CLOSE_SWITCH_ENTITY_ID, "")
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(
-                CONF_STOP_SWITCH_ENTITY_ID, 
-                default=data.get(CONF_STOP_SWITCH_ENTITY_ID, "")
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain=["switch", "script", "automation", "input_boolean"])
-            ),
-            vol.Optional(
-                CONF_IS_BUTTON, 
-                default=data.get(CONF_IS_BUTTON, False)
-            ): bool,
-            vol.Optional("use_simple_mode", default=False): bool,
-            # Simple mode fields
-            vol.Optional("opening_total_time", default=10.0): vol.All(
-                vol.Coerce(float), vol.Range(min=0.1, max=3600)
-            ),
-            vol.Optional("opening_positions", default="0,100"): str,
-            vol.Optional("closing_total_time", default=10.0): vol.All(
-                vol.Coerce(float), vol.Range(min=0.1, max=3600)
-            ),
-            vol.Optional("closing_positions", default="100,0"): str,
-            # JSON mode fields
-            vol.Optional(
-                CONF_OPENING_TIME_MAP, 
-                default=json.dumps(data.get(CONF_OPENING_TIME_MAP, {"0": 0, "10": 100}))
-            ): str,
-            vol.Optional(
-                CONF_CLOSING_TIME_MAP, 
-                default=json.dumps(data.get(CONF_CLOSING_TIME_MAP, {"0": 100, "10": 0}))
-            ): str,
-            # Tilt fields (optional, using string to allow empty values)
-            vol.Optional(
-                CONF_TILTING_TIME_DOWN, 
-                default=current_tilt_down if current_tilt_down is not None else vol.UNDEFINED
-            ): str,  # Use string to allow empty values
-            vol.Optional(
-                CONF_TILTING_TIME_UP, 
-                default=current_tilt_up if current_tilt_up is not None else vol.UNDEFINED
-            ): str,  # Use string to allow empty values
-        })
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Optional(
+                    CONF_TILTING_TIME_DOWN,
+                    default=str(current_data.get(CONF_TILTING_TIME_DOWN, "")) if current_data.get(CONF_TILTING_TIME_DOWN) else ""
+                ): str,
+                vol.Optional(
+                    CONF_TILTING_TIME_UP,
+                    default=str(current_data.get(CONF_TILTING_TIME_UP, "")) if current_data.get(CONF_TILTING_TIME_UP) else ""
+                ): str,
+            }),
+            errors=errors,
+        )

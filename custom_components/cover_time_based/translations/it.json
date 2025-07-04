@@ -1,0 +1,177 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Cover Time Based - Metodo di Controllo",
+        "description": "Scegli come vuoi controllare la tua copertura.",
+        "data": {
+          "control_method": "Metodo di Controllo"
+        }
+      },
+      "switches": {
+        "title": "Cover Time Based - Modalità Configurazione Switch",
+        "description": "Scegli come vuoi configurare la tua copertura basata su switch.",
+        "data": {
+          "config_mode": "Modalità di Configurazione"
+        }
+      },
+      "switches_standard": {
+        "title": "Cover Time Based - Configurazione Switch Standard",
+        "description": "Configurazione semplice con impostazioni di temporizzazione di base.\nSpecifica semplicemente quanto tempo ci vuole per aprire e chiudere completamente la tua copertura.",
+        "data": {
+          "name": "Nome Copertura",
+          "open_switch_entity_id": "Switch/Script/Automazione Apertura",
+          "close_switch_entity_id": "Switch/Script/Automazione Chiusura",
+          "stop_switch_entity_id": "Switch/Script/Automazione Stop (Opzionale)",
+          "is_button": "Le entità sono pulsanti momentanei (si spengono automaticamente)",
+          "opening_time": "Tempo per aprire completamente (secondi)",
+          "closing_time": "Tempo per chiudere completamente (secondi)",
+          "tilting_time_down": "Tempo Inclinazione Giù (secondi, opzionale)",
+          "tilting_time_up": "Tempo Inclinazione Su (secondi, opzionale)"
+        }
+      },
+      "switches_advanced": {
+        "title": "Cover Time Based - Configurazione Switch Avanzata",
+        "description": "Controllo completo con mappe temporali personalizzate in formato JSON.\nEsempio: {\"0\": 0, \"5\": 50, \"10\": 100} significa:\n- A 0 secondi: posizione 0%\n- A 5 secondi: posizione 50%\n- A 10 secondi: posizione 100%",
+        "data": {
+          "name": "Nome Copertura",
+          "open_switch_entity_id": "Switch/Script/Automazione Apertura",
+          "close_switch_entity_id": "Switch/Script/Automazione Chiusura",
+          "stop_switch_entity_id": "Switch/Script/Automazione Stop (Opzionale)",
+          "is_button": "Le entità sono pulsanti momentanei (si spengono automaticamente)",
+          "opening_time_map": "Mappa Temporale Apertura (JSON)",
+          "closing_time_map": "Mappa Temporale Chiusura (JSON)",
+          "tilting_time_down": "Tempo Inclinazione Giù (secondi, opzionale)",
+          "tilting_time_up": "Tempo Inclinazione Su (secondi, opzionale)"
+        }
+      },
+      "switches_automatic": {
+        "title": "Cover Time Based - Configurazione Switch Automatica",
+        "description": "Configurazione rapida con rilevamento automatico e impostazioni predefinite.\nPerfetto per iniziare rapidamente - puoi personalizzare in seguito.",
+        "data": {
+          "name": "Nome Copertura",
+          "open_switch_entity_id": "Switch/Script/Automazione Apertura",
+          "close_switch_entity_id": "Switch/Script/Automazione Chiusura",
+          "stop_switch_entity_id": "Switch/Script/Automazione Stop (Opzionale)"
+        }
+      },
+      "existing_cover": {
+        "title": "Cover Time Based - Modalità Configurazione Copertura Esistente",
+        "description": "Scegli come vuoi configurare la tua entità copertura esistente.",
+        "data": {
+          "config_mode": "Modalità di Configurazione"
+        }
+      },
+      "existing_cover_standard": {
+        "title": "Cover Time Based - Configurazione Copertura Esistente Standard",
+        "description": "Configurazione semplice con impostazioni di temporizzazione di base.\nSpecifica semplicemente quanto tempo ci vuole per aprire e chiudere completamente la tua copertura.",
+        "data": {
+          "name": "Nome Copertura",
+          "cover_entity_id": "Entità Copertura Esistente",
+          "opening_time": "Tempo per aprire completamente (secondi)",
+          "closing_time": "Tempo per chiudere completamente (secondi)",
+          "tilting_time_down": "Tempo Inclinazione Giù (secondi, opzionale)",
+          "tilting_time_up": "Tempo Inclinazione Su (secondi, opzionale)"
+        }
+      },
+      "existing_cover_advanced": {
+        "title": "Cover Time Based - Configurazione Copertura Esistente Avanzata",
+        "description": "Controllo completo con mappe temporali personalizzate in formato JSON.\nEsempio: {\"0\": 0, \"5\": 50, \"10\": 100} significa:\n- A 0 secondi: posizione 0%\n- A 5 secondi: posizione 50%\n- A 10 secondi: posizione 100%",
+        "data": {
+          "name": "Nome Copertura",
+          "cover_entity_id": "Entità Copertura Esistente",
+          "opening_time_map": "Mappa Temporale Apertura (JSON)",
+          "closing_time_map": "Mappa Temporale Chiusura (JSON)",
+          "tilting_time_down": "Tempo Inclinazione Giù (secondi, opzionale)",
+          "tilting_time_up": "Tempo Inclinazione Su (secondi, opzionale)"
+        }
+      },
+      "existing_cover_automatic": {
+        "title": "Cover Time Based - Configurazione Copertura Esistente Automatica",
+        "description": "Configurazione rapida con rilevamento automatico e impostazioni predefinite.\nPerfetto per iniziare rapidamente - puoi personalizzare in seguito.",
+        "data": {
+          "name": "Nome Copertura",
+          "cover_entity_id": "Entità Copertura Esistente"
+        }
+      },
+      "reconfigure_switches": {
+        "title": "Riconfigura Cover Time Based - Switch",
+        "description": "Aggiorna la configurazione per la tua copertura basata su switch.\n\nLe mappe temporali definiscono la posizione a intervalli di tempo specifici in formato JSON.\nEsempio: {\"0\": 0, \"5\": 50, \"10\": 100} significa:\n- A 0 secondi: posizione 0%\n- A 5 secondi: posizione 50%\n- A 10 secondi: posizione 100%",
+        "data": {
+          "name": "Nome Copertura",
+          "open_switch_entity_id": "Switch/Script/Automazione Apertura",
+          "close_switch_entity_id": "Switch/Script/Automazione Chiusura",
+          "stop_switch_entity_id": "Switch/Script/Automazione Stop (Opzionale)",
+          "is_button": "Le entità sono pulsanti momentanei (si spengono automaticamente)",
+          "opening_time_map": "Mappa Temporale Apertura (JSON)",
+          "closing_time_map": "Mappa Temporale Chiusura (JSON)",
+          "tilting_time_down": "Tempo Inclinazione Giù (secondi, opzionale)",
+          "tilting_time_up": "Tempo Inclinazione Su (secondi, opzionale)"
+        }
+      },
+      "reconfigure_existing_cover": {
+        "title": "Riconfigura Cover Time Based - Copertura Esistente",
+        "description": "Aggiorna la configurazione per la tua entità copertura esistente.\n\nLe mappe temporali definiscono la posizione a intervalli di tempo specifici in formato JSON.\nEsempio: {\"0\": 0, \"5\": 50, \"10\": 100} significa:\n- A 0 secondi: posizione 0%\n- A 5 secondi: posizione 50%\n- A 10 secondi: posizione 100%",
+        "data": {
+          "name": "Nome Copertura",
+          "cover_entity_id": "Entità Copertura Esistente",
+          "opening_time_map": "Mappa Temporale Apertura (JSON)",
+          "closing_time_map": "Mappa Temporale Chiusura (JSON)",
+          "tilting_time_down": "Tempo Inclinazione Giù (secondi, opzionale)",
+          "tilting_time_up": "Tempo Inclinazione Su (secondi, opzionale)"
+        }
+      }
+    },
+    "error": {
+      "unknown": "Si è verificato un errore imprevisto",
+      "entry_not_found": "Voce di configurazione non trovata",
+      "unexpected_error": "Errore imprevisto: {error}"
+    },
+    "abort": {
+      "already_configured": "Una copertura con questo nome è già configurata",
+      "reconfigure_successful": "Configurazione aggiornata con successo"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Cover Time Based - Opzioni Avanzate",
+        "description": "Configura le opzioni avanzate di inclinazione per la tua copertura.",
+        "data": {
+          "tilting_time_down": "Tempo Inclinazione Giù (secondi, lascia vuoto per disabilitare)",
+          "tilting_time_up": "Tempo Inclinazione Su (secondi, lascia vuoto per disabilitare)"
+        }
+      }
+    }
+  },
+  "services": {
+    "set_known_position": {
+      "name": "Imposta Posizione Nota",
+      "description": "Imposta manualmente la posizione attuale della copertura senza muoverla. Utile per la calibrazione.",
+      "fields": {
+        "entity_id": {
+          "name": "ID Entità",
+          "description": "L'entità copertura per cui impostare la posizione."
+        },
+        "position": {
+          "name": "Posizione",
+          "description": "La posizione attuale della copertura (0-100%)."
+        }
+      }
+    },
+    "set_known_tilt_position": {
+      "name": "Imposta Posizione Inclinazione Nota",
+      "description": "Imposta manualmente la posizione di inclinazione attuale della copertura senza muoverla. Utile per la calibrazione.",
+      "fields": {
+        "entity_id": {
+          "name": "ID Entità",
+          "description": "L'entità copertura per cui impostare la posizione di inclinazione."
+        },
+        "position": {
+          "name": "Posizione Inclinazione",
+          "description": "La posizione di inclinazione attuale della copertura (0-100%)."
+        }
+      }
+    }
+  }
+}
