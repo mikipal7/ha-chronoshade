@@ -136,17 +136,42 @@ class PositionCalculator:
     
     def _validate_and_sort_time_map(self, time_map: Dict[float, int], map_type: str) -> Dict[float, int]:
         """Validate and sort time map."""
+        _LOGGER = logging.getLogger(__name__)
+        
         if not time_map:
             raise vol.Invalid(f"{map_type} time map cannot be empty")
         
+        # Convert keys to float to ensure consistent type handling
+        converted_map = {}
+        for time_key, position in time_map.items():
+            try:
+                float_time = float(time_key)
+                int_position = int(position)
+                converted_map[float_time] = int_position
+            except (ValueError, TypeError) as e:
+                _LOGGER.error(f"Invalid time or position in {map_type} time map: {time_key}={position}, error: {e}")
+                raise vol.Invalid(f"Invalid time or position in {map_type} time map: {time_key}={position}")
+        
         # Sort by time
-        sorted_map = dict(sorted(time_map.items()))
+        sorted_map = dict(sorted(converted_map.items()))
         times = list(sorted_map.keys())
         positions = list(sorted_map.values())
         
-        # Validate time progression
-        if times[0] != 0:
-            raise vol.Invalid(f"{map_type} time map must start at time 0")
+        # Validate time progression - must start at time 0 (with tolerance for floating point precision)
+        first_time = times[0]
+        if abs(first_time) > 0.001:  # Allow small floating point errors
+            _LOGGER.warning(f"{map_type} time map doesn't start at time 0 (starts at {first_time}). Auto-correcting...")
+            
+            # Auto-correct by shifting all times so the first time becomes 0
+            corrected_map = {}
+            for time_val, pos_val in sorted_map.items():
+                corrected_map[time_val - first_time] = pos_val
+            
+            sorted_map = corrected_map
+            times = list(sorted_map.keys())
+            positions = list(sorted_map.values())
+            
+            _LOGGER.info(f"Auto-corrected {map_type} time map: {sorted_map}")
         
         # Validate position range
         for pos in positions:
