@@ -530,8 +530,8 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         if self._has_tilt_support():
             self.tilt_calc = TiltCalculator(self._tilt_time_down, self._tilt_time_up)
         
-        # Device class configuration
-        self._device_class = config.get(CONF_DEVICE_CLASS)
+        # Device class configuration (with backward compatibility)
+        self._device_class = config.get(CONF_DEVICE_CLASS, "")
         
         # Control entities configuration
         if self._control_method == CONTROL_METHOD_SWITCHES:
@@ -588,23 +588,28 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
     @property
     def device_class(self):
         """Return the device class of the cover."""
-        # If user explicitly set a device class, use it
-        if self._device_class:
-            # Convert string to CoverDeviceClass if needed
-            if isinstance(self._device_class, str):
-                try:
-                    return getattr(CoverDeviceClass, self._device_class.upper())
-                except AttributeError:
-                    _LOGGER.warning("Invalid device class '%s', using auto-detection", self._device_class)
+        try:
+            # If user explicitly set a device class, use it
+            if self._device_class and self._device_class.strip():
+                # Convert string to CoverDeviceClass if needed
+                if isinstance(self._device_class, str):
+                    try:
+                        return getattr(CoverDeviceClass, self._device_class.upper())
+                    except AttributeError:
+                        _LOGGER.warning("Invalid device class '%s', using auto-detection", self._device_class)
+                else:
+                    return self._device_class
+            
+            # Auto-detect based on tilt support
+            if self._has_tilt_support():
+                # Blinds commonly have tilt functionality
+                return CoverDeviceClass.BLIND
             else:
-                return self._device_class
-        
-        # Auto-detect based on tilt support
-        if self._has_tilt_support():
-            # Blinds commonly have tilt functionality
-            return CoverDeviceClass.BLIND
-        else:
-            # Shades are typically position-only covers
+                # Shades are typically position-only covers
+                return CoverDeviceClass.SHADE
+                
+        except Exception as e:
+            _LOGGER.warning("Error determining device class, defaulting to SHADE: %s", e)
             return CoverDeviceClass.SHADE
     
     @property

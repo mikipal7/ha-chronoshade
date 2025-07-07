@@ -16,6 +16,7 @@ from .const import (
     CONF_COVER_ENTITY_ID,
     CONF_OPEN_SWITCH_ENTITY_ID,
     CONF_CLOSE_SWITCH_ENTITY_ID,
+    CONF_DEVICE_CLASS,
     CONTROL_METHOD_SWITCHES,
     CONTROL_METHOD_EXISTING_COVER,
     CURRENT_CONFIG_VERSION,
@@ -66,6 +67,13 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
                 return False
         else:
             new_unique_id = config_entry.unique_id
+    
+    # Migration from version 3 to 4: Add device class support
+    if config_entry.version <= 3:
+        # Add device_class field with empty default (auto-detect)
+        if CONF_DEVICE_CLASS not in new_data:
+            new_data[CONF_DEVICE_CLASS] = ""
+        new_version = 4
     
     # Apply migration if needed
     if new_version > config_entry.version:

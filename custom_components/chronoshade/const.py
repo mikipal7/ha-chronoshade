@@ -35,4 +35,4 @@ MANUFACTURER = "ChronoShade"
 MODEL = "Precision Time-based Cover Controller"
 
 # Migration
-CURRENT_CONFIG_VERSION = 3
+CURRENT_CONFIG_VERSION = 4
