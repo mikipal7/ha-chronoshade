@@ -29,6 +29,7 @@ from .const import (
     CONF_IS_BUTTON,
     CONF_COVER_ENTITY_ID,
     CONF_CONTROL_METHOD,
+    CONF_DEVICE_CLASS,
     CONTROL_METHOD_SWITCHES,
     CONTROL_METHOD_EXISTING_COVER,
     DEFAULT_OPENING_TIME_MAP,
@@ -295,6 +296,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_CLOSING_TIME_MAP: closing_map,
                     CONF_TILTING_TIME_DOWN: tilt_down,
                     CONF_TILTING_TIME_UP: tilt_up,
+                    CONF_DEVICE_CLASS: user_input.get(CONF_DEVICE_CLASS, ""),
                 }
                 
                 return self.async_create_entry(title=name, data=data)
@@ -333,6 +335,23 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 vol.Optional(CONF_TILTING_TIME_DOWN): str,
                 vol.Optional(CONF_TILTING_TIME_UP): str,
+                vol.Optional(CONF_DEVICE_CLASS): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": "", "label": "Auto-detect (Blind if tilt, Shade if not)"},
+                            {"value": "awning", "label": "Awning"},
+                            {"value": "blind", "label": "Blind"},
+                            {"value": "curtain", "label": "Curtain"},
+                            {"value": "damper", "label": "Damper"},
+                            {"value": "door", "label": "Door"},
+                            {"value": "garage", "label": "Garage"},
+                            {"value": "gate", "label": "Gate"},
+                            {"value": "shade", "label": "Shade"},
+                            {"value": "shutter", "label": "Shutter"},
+                            {"value": "window", "label": "Window"},
+                        ]
+                    )
+                ),
             }),
             errors=errors,
         )
@@ -388,6 +407,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_CLOSING_TIME_MAP: closing_map,
                     CONF_TILTING_TIME_DOWN: tilt_down,
                     CONF_TILTING_TIME_UP: tilt_up,
+                    CONF_DEVICE_CLASS: user_input.get(CONF_DEVICE_CLASS, ""),
                 }
                 
                 return self.async_create_entry(title=name, data=data)
@@ -428,6 +448,23 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ): str,
                 vol.Optional(CONF_TILTING_TIME_DOWN): str,
                 vol.Optional(CONF_TILTING_TIME_UP): str,
+                vol.Optional(CONF_DEVICE_CLASS): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": "", "label": "Auto-detect (Blind if tilt, Shade if not)"},
+                            {"value": "awning", "label": "Awning"},
+                            {"value": "blind", "label": "Blind"},
+                            {"value": "curtain", "label": "Curtain"},
+                            {"value": "damper", "label": "Damper"},
+                            {"value": "door", "label": "Door"},
+                            {"value": "garage", "label": "Garage"},
+                            {"value": "gate", "label": "Gate"},
+                            {"value": "shade", "label": "Shade"},
+                            {"value": "shutter", "label": "Shutter"},
+                            {"value": "window", "label": "Window"},
+                        ]
+                    )
+                ),
             }),
             errors=errors,
         )
@@ -479,6 +516,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_CLOSING_TIME_MAP: closing_map,
                     CONF_TILTING_TIME_DOWN: None,
                     CONF_TILTING_TIME_UP: None,
+                    CONF_DEVICE_CLASS: user_input.get(CONF_DEVICE_CLASS, ""),
                 }
                 
                 return self.async_create_entry(title=name, data=data)
@@ -594,6 +632,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_CLOSING_TIME_MAP: closing_map,
                     CONF_TILTING_TIME_DOWN: tilt_down,
                     CONF_TILTING_TIME_UP: tilt_up,
+                    CONF_DEVICE_CLASS: user_input.get(CONF_DEVICE_CLASS, ""),
                 }
                 
                 return self.async_create_entry(title=name, data=data)
@@ -619,6 +658,23 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 vol.Optional(CONF_TILTING_TIME_DOWN): str,
                 vol.Optional(CONF_TILTING_TIME_UP): str,
+                vol.Optional(CONF_DEVICE_CLASS): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": "", "label": "Auto-detect (Blind if tilt, Shade if not)"},
+                            {"value": "awning", "label": "Awning"},
+                            {"value": "blind", "label": "Blind"},
+                            {"value": "curtain", "label": "Curtain"},
+                            {"value": "damper", "label": "Damper"},
+                            {"value": "door", "label": "Door"},
+                            {"value": "garage", "label": "Garage"},
+                            {"value": "gate", "label": "Gate"},
+                            {"value": "shade", "label": "Shade"},
+                            {"value": "shutter", "label": "Shutter"},
+                            {"value": "window", "label": "Window"},
+                        ]
+                    )
+                ),
             }),
             errors=errors,
         )
@@ -663,6 +719,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_CLOSING_TIME_MAP: closing_map,
                     CONF_TILTING_TIME_DOWN: tilt_down,
                     CONF_TILTING_TIME_UP: tilt_up,
+                    CONF_DEVICE_CLASS: user_input.get(CONF_DEVICE_CLASS, ""),
                 }
                 
                 return self.async_create_entry(title=name, data=data)
@@ -690,6 +747,23 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ): str,
                 vol.Optional(CONF_TILTING_TIME_DOWN): str,
                 vol.Optional(CONF_TILTING_TIME_UP): str,
+                vol.Optional(CONF_DEVICE_CLASS): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": "", "label": "Auto-detect (Blind if tilt, Shade if not)"},
+                            {"value": "awning", "label": "Awning"},
+                            {"value": "blind", "label": "Blind"},
+                            {"value": "curtain", "label": "Curtain"},
+                            {"value": "damper", "label": "Damper"},
+                            {"value": "door", "label": "Door"},
+                            {"value": "garage", "label": "Garage"},
+                            {"value": "gate", "label": "Gate"},
+                            {"value": "shade", "label": "Shade"},
+                            {"value": "shutter", "label": "Shutter"},
+                            {"value": "window", "label": "Window"},
+                        ]
+                    )
+                ),
             }),
             errors=errors,
         )
@@ -726,6 +800,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_CLOSING_TIME_MAP: closing_map,
                     CONF_TILTING_TIME_DOWN: None,
                     CONF_TILTING_TIME_UP: None,
+                    CONF_DEVICE_CLASS: user_input.get(CONF_DEVICE_CLASS, ""),
                 }
                 
                 return self.async_create_entry(title=name, data=data)

@@ -15,6 +15,7 @@ CONF_STOP_SWITCH_ENTITY_ID = "stop_switch_entity_id"
 CONF_IS_BUTTON = "is_button"
 CONF_COVER_ENTITY_ID = "cover_entity_id"
 CONF_CONTROL_METHOD = "control_method"
+CONF_DEVICE_CLASS = "device_class"
 
 # Control methods
 CONTROL_METHOD_SWITCHES = "switches"

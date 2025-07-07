@@ -17,6 +17,7 @@ from homeassistant.components.cover import (
     PLATFORM_SCHEMA,
     CoverEntity,
     CoverEntityFeature,
+    CoverDeviceClass,
 )
 from homeassistant.const import (
     CONF_NAME,
@@ -47,6 +48,7 @@ from .const import (
     CONF_COVER_ENTITY_ID,
     CONF_IS_BUTTON,
     CONF_CONTROL_METHOD,
+    CONF_DEVICE_CLASS,
     CONTROL_METHOD_SWITCHES,
     CONTROL_METHOD_EXISTING_COVER,
     SERVICE_SET_KNOWN_POSITION,
@@ -79,6 +81,7 @@ SWITCH_COVER_SCHEMA = {
     vol.Required(CONF_CLOSING_TIME_MAP): TIME_MAP_SCHEMA,
     vol.Optional(CONF_TILTING_TIME_DOWN, default=None): vol.Any(cv.positive_float, None),
     vol.Optional(CONF_TILTING_TIME_UP, default=None): vol.Any(cv.positive_float, None),
+    vol.Optional(CONF_DEVICE_CLASS, default=None): vol.Any(cv.string, None),
 }
 
 ENTITY_COVER_SCHEMA = {
@@ -88,6 +91,7 @@ ENTITY_COVER_SCHEMA = {
     vol.Required(CONF_CLOSING_TIME_MAP): TIME_MAP_SCHEMA,
     vol.Optional(CONF_TILTING_TIME_DOWN, default=None): vol.Any(cv.positive_float, None),
     vol.Optional(CONF_TILTING_TIME_UP, default=None): vol.Any(cv.positive_float, None),
+    vol.Optional(CONF_DEVICE_CLASS, default=None): vol.Any(cv.string, None),
 }
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
@@ -526,6 +530,9 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
         if self._has_tilt_support():
             self.tilt_calc = TiltCalculator(self._tilt_time_down, self._tilt_time_up)
         
+        # Device class configuration
+        self._device_class = config.get(CONF_DEVICE_CLASS)
+        
         # Control entities configuration
         if self._control_method == CONTROL_METHOD_SWITCHES:
             self._open_switch_entity_id = config.get(CONF_OPEN_SWITCH_ENTITY_ID)
@@ -581,7 +588,24 @@ class CoverTimeBased(CoverEntity, RestoreEntity):
     @property
     def device_class(self):
         """Return the device class of the cover."""
-        return None
+        # If user explicitly set a device class, use it
+        if self._device_class:
+            # Convert string to CoverDeviceClass if needed
+            if isinstance(self._device_class, str):
+                try:
+                    return getattr(CoverDeviceClass, self._device_class.upper())
+                except AttributeError:
+                    _LOGGER.warning("Invalid device class '%s', using auto-detection", self._device_class)
+            else:
+                return self._device_class
+        
+        # Auto-detect based on tilt support
+        if self._has_tilt_support():
+            # Blinds commonly have tilt functionality
+            return CoverDeviceClass.BLIND
+        else:
+            # Shades are typically position-only covers
+            return CoverDeviceClass.SHADE
     
     @property
     def extra_state_attributes(self):
