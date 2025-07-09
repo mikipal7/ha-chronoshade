@@ -9,7 +9,5 @@
   "requirements": [],
   "version": "1.0.1",
   "config_flow": true,
-  "homeassistant_minimum_version": "2024.1.0",
-  "after_dependencies": ["recorder"],
-  "icon": "mdi:window-shutter"
+  "after_dependencies": ["recorder"]
 }
