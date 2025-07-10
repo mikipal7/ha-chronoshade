@@ -162,10 +162,6 @@ ChronoShade solves this by letting you map the **actual behavior** of your cover
 2. Check Home Assistant logs for errors
 3. Ensure you've restarted Home Assistant after installation
 
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
